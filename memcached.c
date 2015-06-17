@@ -522,15 +522,13 @@ memcache_parse(struct memcache_request *req, const char *p, const char *pe) {
     bool done = false;
 
     memset(req, 0, sizeof(struct memcache_request));
-    printf("%.*s", pe-p, p);
-
     
-#line 529 "memcached.c"
+#line 527 "memcached.c"
 	{
 	cs = memcached_start;
 	}
 
-#line 534 "memcached.c"
+#line 532 "memcached.c"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -604,93 +602,92 @@ _match:
 		switch ( *_acts++ )
 		{
 	case 0:
-#line 62 "memcached.rl"
+#line 60 "memcached.rl"
 	{
             req->op = MC_SET;
         }
 	break;
 	case 1:
-#line 65 "memcached.rl"
+#line 63 "memcached.rl"
 	{
             req->op = MC_ADD;
         }
 	break;
 	case 2:
-#line 68 "memcached.rl"
+#line 66 "memcached.rl"
 	{
             req->op = MC_REPLACE;
-            printf("replace\n");
         }
 	break;
 	case 3:
-#line 72 "memcached.rl"
+#line 69 "memcached.rl"
 	{
             req->op = MC_APPEND;
         }
 	break;
 	case 4:
-#line 75 "memcached.rl"
+#line 72 "memcached.rl"
 	{
             req->op = MC_PREPEND;
         }
 	break;
 	case 5:
-#line 78 "memcached.rl"
+#line 75 "memcached.rl"
 	{
             req->op = MC_CAS;
         }
 	break;
 	case 6:
-#line 81 "memcached.rl"
+#line 78 "memcached.rl"
 	{
             req->op = MC_GET;
         }
 	break;
 	case 7:
-#line 84 "memcached.rl"
+#line 81 "memcached.rl"
 	{
             req->op = MC_GETS;
         }
 	break;
 	case 8:
-#line 87 "memcached.rl"
+#line 84 "memcached.rl"
 	{
             req->op = MC_DELETE;
         }
 	break;
 	case 9:
-#line 90 "memcached.rl"
+#line 87 "memcached.rl"
 	{
             req->op = MC_INCR;
         }
 	break;
 	case 10:
-#line 93 "memcached.rl"
+#line 90 "memcached.rl"
 	{
             req->op = MC_DECR;
             req->inc_val *= -1;
         }
 	break;
 	case 11:
-#line 97 "memcached.rl"
+#line 94 "memcached.rl"
 	{
             req->op = MC_FLUSH;
         }
 	break;
 	case 12:
-#line 100 "memcached.rl"
+#line 97 "memcached.rl"
 	{
             req->op = MC_STATS;
         }
 	break;
 	case 13:
-#line 103 "memcached.rl"
+#line 100 "memcached.rl"
 	{
             req->op = MC_QUIT;
         }
 	break;
 	case 14:
-#line 107 "memcached.rl"
+#line 104 "memcached.rl"
 	{
             printf("key\n");
             s = p;
@@ -698,19 +695,16 @@ _match:
             if (*p == ' ' || *p == '\r' || *p == '\n') {
                 if (req->key == NULL)
                     req->key = s;
-                printf("bodyaga\n");
-                printf("\n%p %p\n", req->key, p);
                 req->key_len = (p - req->key);
                 p -= 1;
                 req->key_count += 1;
             } else {
-                printf("bodyaga\n");
                 p = s;
             }
         }
 	break;
 	case 15:
-#line 124 "memcached.rl"
+#line 118 "memcached.rl"
 	{
             printf("data\n");
             req->data = p;
@@ -725,73 +719,73 @@ _match:
         }
 	break;
 	case 16:
-#line 136 "memcached.rl"
+#line 130 "memcached.rl"
 	{
             printf("done\n");
             done = true;
         }
 	break;
 	case 17:
-#line 144 "memcached.rl"
+#line 138 "memcached.rl"
 	{ printf("exptime\n"); s = p; }
 	break;
 	case 18:
-#line 145 "memcached.rl"
+#line 139 "memcached.rl"
 	{ if (mc_strtoul(s, p, &req->exptime) == -1) assert(0); }
 	break;
 	case 19:
-#line 147 "memcached.rl"
+#line 141 "memcached.rl"
 	{ printf("flags\n"); s = p; }
 	break;
 	case 20:
-#line 148 "memcached.rl"
+#line 142 "memcached.rl"
 	{ if (mc_strtoul(s, p, &req->flags) == -1) assert(0); }
 	break;
 	case 21:
-#line 150 "memcached.rl"
+#line 144 "memcached.rl"
 	{ printf("bytes\n"); s = p; }
 	break;
 	case 22:
-#line 151 "memcached.rl"
+#line 145 "memcached.rl"
 	{ if (mc_strtoul(s, p, &req->bytes) == -1) assert(0); }
 	break;
 	case 23:
-#line 153 "memcached.rl"
+#line 147 "memcached.rl"
 	{ printf("cas\n"); s = p; }
 	break;
 	case 24:
-#line 154 "memcached.rl"
+#line 148 "memcached.rl"
 	{ if (mc_strtoul(s, p, &req->cas) == -1) assert(0); }
 	break;
 	case 25:
-#line 156 "memcached.rl"
+#line 150 "memcached.rl"
 	{ printf("incr\n"); s = p; }
 	break;
 	case 26:
-#line 157 "memcached.rl"
+#line 151 "memcached.rl"
 	{ if (mc_strtoul(s, p, &req->inc_val) == -1) assert(0); }
 	break;
 	case 27:
-#line 159 "memcached.rl"
+#line 153 "memcached.rl"
 	{ printf("flush_delay\n"); s = p; }
 	break;
 	case 28:
-#line 160 "memcached.rl"
+#line 154 "memcached.rl"
 	{ if (mc_strtoul(s, p, &req->exptime) == -1) assert(0); }
 	break;
 	case 29:
-#line 162 "memcached.rl"
+#line 156 "memcached.rl"
 	{ p++; printf("eof\n"); }
 	break;
 	case 30:
-#line 163 "memcached.rl"
+#line 157 "memcached.rl"
 	{printf("spc\n");}
 	break;
 	case 31:
-#line 164 "memcached.rl"
+#line 158 "memcached.rl"
 	{ req->noreply = true; }
 	break;
-#line 795 "memcached.c"
+#line 789 "memcached.c"
 		}
 	}
 
@@ -804,7 +798,7 @@ _again:
 	_out: {}
 	}
 
-#line 195 "memcached.rl"
+#line 189 "memcached.rl"
 
 
     if (!done) {

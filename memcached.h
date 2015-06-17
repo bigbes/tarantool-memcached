@@ -12,6 +12,7 @@ enum memcache_op {
 	MC_DECR,
 	MC_FLUSH,
 	MC_STATS,
+	MC_VERSION,
 	MC_QUIT,
 };
 
