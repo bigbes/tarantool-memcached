@@ -50,12 +50,13 @@ mc_strtoul(const char *start, const char *end, uint64_t *num)
 }
 
 MC_EXPORT int
-memcache_parse(struct memcache_request *req, const char *p, const char *pe) {
+mc_parse(struct mc_request *req, const char **p_ptr, const char *pe) {
+    const char *p = *p_ptr;
     int cs = 0;
     const char *s = NULL;
     bool done = false;
 
-    memset(req, 0, sizeof(struct memcache_request));
+    memset(req, 0, sizeof(struct mc_request));
     %%{
         action set {
             req->op = MC_SET;
@@ -89,7 +90,6 @@ memcache_parse(struct memcache_request *req, const char *p, const char *pe) {
         }
         action decr {
             req->op = MC_DECR;
-            req->inc_val *= -1;
         }
         action flush_all {
             req->op = MC_FLUSH;
@@ -102,59 +102,76 @@ memcache_parse(struct memcache_request *req, const char *p, const char *pe) {
         }
 
         action key_start {
-            printf("key\n");
             s = p;
             for (; p < pe && *p != ' ' && *p != '\r' && *p != '\n'; p++);
             if (*p == ' ' || *p == '\r' || *p == '\n') {
                 if (req->key == NULL)
                     req->key = s;
-                req->key_len = (p - req->key);
-                p -= 1;
+                req->key_len = (p-- - req->key);
                 req->key_count += 1;
             } else {
                 p = s;
             }
         }
         action read_data {
-            printf("data\n");
             req->data = p;
             req->data_len = req->bytes;
 
-            if (strncmp(req->data + req->data_len, "\r\n", 2) == 0) {
+            if (req->data + req->data_len <= pe - 2) {
+                if (strncmp(req->data + req->data_len, "\r\n", 2) != 0) {
+                    return -7;
+                }
                 p += req->bytes + 2;
             } else {
-                printf("goto exit\n");
-                goto exit;
+                return (req->data_len + 2) - (pe - req->data);
             }
         }
         action done {
-            printf("done\n");
+            *p_ptr = p;
             done = true;
         }
         printable = [^ \t\r\n];
         key = printable >key_start ;
 
         exptime = digit+
-                >{ printf("exptime\n"); s = p; }
-                %{ if (mc_strtoul(s, p, &req->exptime) == -1) assert(0); };
+                >{ s = p; }
+                %{
+                    if (mc_strtoul(s, p, &req->exptime) == -1)
+                        return -2;
+                };
         flags = digit+
-                >{ printf("flags\n"); s = p; }
-                %{ if (mc_strtoul(s, p, &req->flags) == -1) assert(0); };
+                >{ s = p; }
+                %{
+                    if (mc_strtoul(s, p, &req->flags) == -1)
+                        return -3;
+                };
         bytes = digit+
-                >{ printf("bytes\n"); s = p; }
-                %{ if (mc_strtoul(s, p, &req->bytes) == -1) assert(0); };
+                >{ s = p; }
+                %{
+                    if (mc_strtoul(s, p, &req->bytes) == -1)
+                        return -4;
+                };
         cas_value = digit+
-                >{ printf("cas\n"); s = p; }
-                %{ if (mc_strtoul(s, p, &req->cas) == -1) assert(0); };
+                >{ s = p; }
+                %{
+                    if (mc_strtoul(s, p, &req->cas) == -1)
+                        return -5;
+                };
         incr_value = digit+
-                >{ printf("incr\n"); s = p; }
-                %{ if (mc_strtoul(s, p, &req->inc_val) == -1) assert(0); };
+                >{ s = p; }
+                %{
+                    if (mc_strtoul(s, p, &req->inc_val) == -1)
+                        return -6;
+                };
         flush_delay = digit+
-                >{ printf("flush_delay\n"); s = p; }
-                %{ if (mc_strtoul(s, p, &req->exptime) == -1) assert(0); };
+                >{ s = p; }
+                %{
+                    if (mc_strtoul(s, p, &req->exptime) == -1)
+                        return -7;
+                };
 
-        eol = ("\r\n" | "\n") @{ p++; printf("eof\n"); };
-        spc = " "+ %{printf("spc\n");};
+        eol = ("\r\n" | "\n") @{ p++; };
+        spc = " "+;
         noreply = (spc "noreply"i %{ req->noreply = true; })?;
 
         store_body = spc key spc flags spc exptime spc bytes               noreply spc? eol;
@@ -188,17 +205,12 @@ memcache_parse(struct memcache_request *req, const char *p, const char *pe) {
         write exec;
     }%%
 
+
     if (!done) {
-exit:
+        if (p == pe)
+            return 1;
         return -1;
     }
-    return 0;
-}
-
-int main() {
-    struct memcache_request req;
-    const char s[] = "replace notexist 0 0 6\r\nbarva2\r\n";
-    memcache_parse(&req, s, s + sizeof(s) - 1);
     return 0;
 }
 

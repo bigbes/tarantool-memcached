@@ -14,41 +14,32 @@
 
 #line 16 "memcached.c"
 static const char _memcached_actions[] = {
-	0, 1, 18, 1, 20, 1, 22, 1, 
-	24, 1, 26, 1, 28, 1, 30, 1, 
-	31, 2, 30, 14, 2, 30, 17, 2, 
-	30, 19, 2, 30, 21, 2, 30, 23, 
-	2, 30, 25, 2, 30, 27, 3, 29, 
-	16, 6, 3, 29, 16, 7, 3, 29, 
-	16, 8, 3, 29, 16, 9, 3, 29, 
-	16, 10, 3, 29, 16, 11, 3, 29, 
-	16, 12, 3, 29, 16, 13, 4, 18, 
-	29, 16, 8, 4, 26, 29, 16, 9, 
-	4, 26, 29, 16, 10, 4, 28, 29, 
-	16, 11, 4, 29, 15, 16, 0, 4, 
-	29, 15, 16, 1, 4, 29, 15, 16, 
-	2, 4, 29, 15, 16, 3, 4, 29, 
-	15, 16, 4, 4, 29, 15, 16, 5, 
-	4, 30, 29, 16, 6, 4, 30, 29, 
-	16, 7, 4, 30, 29, 16, 8, 4, 
-	30, 29, 16, 9, 4, 30, 29, 16, 
-	10, 4, 30, 29, 16, 11, 4, 31, 
-	29, 16, 8, 4, 31, 29, 16, 9, 
-	4, 31, 29, 16, 10, 4, 31, 29, 
-	16, 11, 5, 22, 29, 15, 16, 0, 
-	5, 22, 29, 15, 16, 1, 5, 22, 
-	29, 15, 16, 2, 5, 22, 29, 15, 
-	16, 3, 5, 22, 29, 15, 16, 4, 
-	5, 24, 29, 15, 16, 5, 5, 30, 
-	29, 15, 16, 0, 5, 30, 29, 15, 
-	16, 1, 5, 30, 29, 15, 16, 2, 
-	5, 30, 29, 15, 16, 3, 5, 30, 
-	29, 15, 16, 4, 5, 30, 29, 15, 
-	16, 5, 5, 31, 29, 15, 16, 0, 
-	5, 31, 29, 15, 16, 1, 5, 31, 
-	29, 15, 16, 2, 5, 31, 29, 15, 
-	16, 3, 5, 31, 29, 15, 16, 4, 
-	5, 31, 29, 15, 16, 5
+	0, 1, 14, 1, 17, 1, 18, 1, 
+	19, 1, 20, 1, 21, 1, 22, 1, 
+	23, 1, 24, 1, 25, 1, 26, 1, 
+	27, 1, 28, 1, 30, 3, 29, 16, 
+	6, 3, 29, 16, 7, 3, 29, 16, 
+	8, 3, 29, 16, 9, 3, 29, 16, 
+	10, 3, 29, 16, 11, 3, 29, 16, 
+	12, 3, 29, 16, 13, 4, 18, 29, 
+	16, 8, 4, 26, 29, 16, 9, 4, 
+	26, 29, 16, 10, 4, 28, 29, 16, 
+	11, 4, 29, 15, 16, 0, 4, 29, 
+	15, 16, 1, 4, 29, 15, 16, 2, 
+	4, 29, 15, 16, 3, 4, 29, 15, 
+	16, 4, 4, 29, 15, 16, 5, 4, 
+	30, 29, 16, 8, 4, 30, 29, 16, 
+	9, 4, 30, 29, 16, 10, 4, 30, 
+	29, 16, 11, 5, 22, 29, 15, 16, 
+	0, 5, 22, 29, 15, 16, 1, 5, 
+	22, 29, 15, 16, 2, 5, 22, 29, 
+	15, 16, 3, 5, 22, 29, 15, 16, 
+	4, 5, 24, 29, 15, 16, 5, 5, 
+	30, 29, 15, 16, 0, 5, 30, 29, 
+	15, 16, 1, 5, 30, 29, 15, 16, 
+	2, 5, 30, 29, 15, 16, 3, 5, 
+	30, 29, 15, 16, 4, 5, 30, 29, 
+	15, 16, 5
 };
 
 static const short _memcached_key_offsets[] = {
@@ -367,107 +358,107 @@ static const unsigned char _memcached_trans_targs[] = {
 	237, 236, 0, 237, 0, 0, 0
 };
 
-static const short _memcached_trans_actions[] = {
+static const unsigned char _memcached_trans_actions[] = {
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 17, 0, 0, 0, 23, 0, 
-	3, 0, 0, 0, 20, 0, 1, 0, 
-	0, 0, 26, 0, 176, 5, 5, 0, 
-	0, 95, 0, 212, 13, 0, 13, 13, 
+	0, 0, 1, 0, 0, 0, 7, 0, 
+	9, 0, 0, 0, 3, 0, 5, 0, 
+	0, 0, 11, 0, 137, 13, 13, 0, 
+	0, 86, 0, 86, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 248, 15, 15, 0, 212, 
-	13, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 17, 0, 0, 0, 
-	23, 0, 3, 0, 0, 0, 20, 0, 
-	1, 0, 0, 0, 26, 0, 188, 5, 
-	5, 0, 0, 105, 0, 224, 13, 0, 
-	13, 13, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 260, 15, 15, 
-	0, 224, 13, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	17, 0, 0, 0, 23, 0, 3, 0, 
-	0, 0, 20, 0, 1, 0, 0, 0, 
-	26, 0, 5, 0, 0, 0, 29, 0, 
-	200, 7, 7, 0, 0, 115, 0, 236, 
-	13, 0, 13, 13, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 272, 
-	15, 15, 0, 236, 13, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 17, 
-	0, 0, 0, 32, 0, 80, 9, 9, 
-	0, 0, 54, 0, 140, 13, 0, 13, 
-	13, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 160, 15, 15, 0, 
-	140, 13, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 17, 46, 0, 0, 0, 46, 
-	0, 130, 13, 0, 13, 13, 20, 0, 
-	70, 1, 1, 0, 0, 130, 13, 0, 
-	13, 13, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 150, 15, 15, 
-	0, 130, 13, 0, 0, 0, 0, 0, 
+	0, 0, 0, 173, 27, 27, 0, 86, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 58, 0, 0, 0, 
-	58, 0, 145, 13, 0, 13, 13, 35, 
-	0, 85, 11, 11, 0, 0, 145, 13, 
-	0, 13, 13, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 165, 15, 
-	15, 0, 145, 13, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 17, 38, 0, 0, 0, 
-	38, 0, 0, 120, 13, 0, 17, 0, 
-	0, 0, 0, 0, 17, 42, 0, 0, 
-	0, 42, 0, 0, 125, 13, 0, 17, 
-	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 17, 0, 
-	0, 0, 32, 0, 75, 9, 9, 0, 
-	0, 50, 0, 135, 13, 0, 13, 13, 
+	0, 0, 0, 0, 1, 0, 0, 0, 
+	7, 0, 9, 0, 0, 0, 3, 0, 
+	5, 0, 0, 0, 11, 0, 149, 13, 
+	13, 0, 0, 96, 0, 96, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 155, 15, 15, 0, 135, 
-	13, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 185, 27, 27, 
+	0, 96, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	1, 0, 0, 0, 7, 0, 9, 0, 
+	0, 0, 3, 0, 5, 0, 0, 0, 
+	11, 0, 13, 0, 0, 0, 15, 0, 
+	161, 17, 17, 0, 0, 106, 0, 106, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 17, 0, 0, 0, 23, 0, 
-	3, 0, 0, 0, 20, 0, 1, 0, 
-	0, 0, 26, 0, 194, 5, 5, 0, 
-	0, 110, 0, 230, 13, 0, 13, 13, 
+	0, 0, 0, 0, 0, 0, 0, 197, 
+	27, 27, 0, 106, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 1, 
+	0, 0, 0, 19, 0, 71, 21, 21, 
+	0, 0, 45, 0, 45, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 266, 15, 15, 0, 230, 
-	13, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 66, 0, 0, 66, 
+	0, 0, 0, 0, 121, 27, 27, 0, 
+	45, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 1, 37, 0, 0, 0, 37, 
+	0, 37, 0, 0, 0, 0, 3, 0, 
+	61, 5, 5, 0, 0, 37, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 111, 27, 27, 
+	0, 37, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 49, 0, 0, 0, 
+	49, 0, 49, 0, 0, 0, 0, 23, 
+	0, 76, 25, 25, 0, 0, 49, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 126, 27, 
+	27, 0, 49, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 1, 29, 0, 0, 0, 
+	29, 0, 0, 29, 0, 0, 1, 0, 
+	0, 0, 0, 0, 1, 33, 0, 0, 
+	0, 33, 0, 0, 33, 0, 0, 1, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 1, 0, 
+	0, 0, 19, 0, 66, 21, 21, 0, 
+	0, 41, 0, 41, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 116, 27, 27, 0, 41, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	17, 0, 0, 0, 23, 0, 3, 0, 
-	0, 0, 20, 0, 1, 0, 0, 0, 
-	26, 0, 182, 5, 5, 0, 0, 100, 
-	0, 218, 13, 0, 13, 13, 0, 0, 
+	0, 0, 1, 0, 0, 0, 7, 0, 
+	9, 0, 0, 0, 3, 0, 5, 0, 
+	0, 0, 11, 0, 155, 13, 13, 0, 
+	0, 101, 0, 101, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 254, 15, 15, 0, 218, 13, 0, 
+	0, 0, 0, 191, 27, 27, 0, 101, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 17, 0, 
-	0, 0, 23, 0, 3, 0, 0, 0, 
-	20, 0, 1, 0, 0, 0, 26, 0, 
-	170, 5, 5, 0, 0, 90, 0, 206, 
-	13, 0, 13, 13, 0, 0, 0, 0, 
+	0, 0, 0, 0, 57, 0, 0, 57, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	0, 0, 0, 0, 0, 0, 0, 242, 
-	15, 15, 0, 206, 13, 0, 0, 0, 
 	0, 0, 0, 0, 0, 0, 0, 0, 
-	62, 0, 0, 62, 0, 0, 0
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	1, 0, 0, 0, 7, 0, 9, 0, 
+	0, 0, 3, 0, 5, 0, 0, 0, 
+	11, 0, 143, 13, 13, 0, 0, 91, 
+	0, 91, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 179, 27, 27, 0, 91, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 1, 0, 
+	0, 0, 7, 0, 9, 0, 0, 0, 
+	3, 0, 5, 0, 0, 0, 11, 0, 
+	131, 13, 13, 0, 0, 81, 0, 81, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 167, 
+	27, 27, 0, 81, 0, 0, 0, 0, 
+	0, 0, 0, 0, 0, 0, 0, 0, 
+	53, 0, 0, 53, 0, 0, 0
 };
 
 static const int memcached_start = 1;
@@ -516,19 +507,20 @@ mc_strtoul(const char *start, const char *end, uint64_t *num)
 }
 
 MC_EXPORT int
-memcache_parse(struct memcache_request *req, const char *p, const char *pe) {
+mc_parse(struct mc_request *req, const char **p_ptr, const char *pe) {
+    const char *p = *p_ptr;
     int cs = 0;
     const char *s = NULL;
     bool done = false;
 
-    memset(req, 0, sizeof(struct memcache_request));
+    memset(req, 0, sizeof(struct mc_request));
     
-#line 527 "memcached.c"
+#line 519 "memcached.c"
 	{
 	cs = memcached_start;
 	}
 
-#line 532 "memcached.c"
+#line 524 "memcached.c"
 	{
 	int _klen;
 	unsigned int _trans;
@@ -602,70 +594,69 @@ _match:
 		switch ( *_acts++ )
 		{
 	case 0:
-#line 60 "memcached.rl"
+#line 61 "memcached.rl"
 	{
             req->op = MC_SET;
         }
 	break;
 	case 1:
-#line 63 "memcached.rl"
+#line 64 "memcached.rl"
 	{
             req->op = MC_ADD;
         }
 	break;
 	case 2:
-#line 66 "memcached.rl"
+#line 67 "memcached.rl"
 	{
             req->op = MC_REPLACE;
         }
 	break;
 	case 3:
-#line 69 "memcached.rl"
+#line 70 "memcached.rl"
 	{
             req->op = MC_APPEND;
         }
 	break;
 	case 4:
-#line 72 "memcached.rl"
+#line 73 "memcached.rl"
 	{
             req->op = MC_PREPEND;
         }
 	break;
 	case 5:
-#line 75 "memcached.rl"
+#line 76 "memcached.rl"
 	{
             req->op = MC_CAS;
         }
 	break;
 	case 6:
-#line 78 "memcached.rl"
+#line 79 "memcached.rl"
 	{
             req->op = MC_GET;
         }
 	break;
 	case 7:
-#line 81 "memcached.rl"
+#line 82 "memcached.rl"
 	{
             req->op = MC_GETS;
         }
 	break;
 	case 8:
-#line 84 "memcached.rl"
+#line 85 "memcached.rl"
 	{
             req->op = MC_DELETE;
         }
 	break;
 	case 9:
-#line 87 "memcached.rl"
+#line 88 "memcached.rl"
 	{
             req->op = MC_INCR;
         }
 	break;
 	case 10:
-#line 90 "memcached.rl"
+#line 91 "memcached.rl"
 	{
             req->op = MC_DECR;
-            req->inc_val *= -1;
         }
 	break;
 	case 11:
@@ -689,14 +680,12 @@ _match:
 	case 14:
 #line 104 "memcached.rl"
 	{
-            printf("key\n");
             s = p;
             for (; p < pe && *p != ' ' && *p != '\r' && *p != '\n'; p++);
             if (*p == ' ' || *p == '\r' || *p == '\n') {
                 if (req->key == NULL)
                     req->key = s;
-                req->key_len = (p - req->key);
-                p -= 1;
+                req->key_len = (p-- - req->key);
                 req->key_count += 1;
             } else {
                 p = s;
@@ -704,88 +693,103 @@ _match:
         }
 	break;
 	case 15:
-#line 118 "memcached.rl"
+#line 116 "memcached.rl"
 	{
-            printf("data\n");
             req->data = p;
             req->data_len = req->bytes;
 
-            if (strncmp(req->data + req->data_len, "\r\n", 2) == 0) {
+            if (req->data + req->data_len <= pe - 2) {
+                if (strncmp(req->data + req->data_len, "\r\n", 2) != 0) {
+                    return -7;
+                }
                 p += req->bytes + 2;
             } else {
-                printf("goto exit\n");
-                goto exit;
+                return (req->data_len + 2) - (pe - req->data);
             }
         }
 	break;
 	case 16:
-#line 130 "memcached.rl"
+#line 129 "memcached.rl"
 	{
-            printf("done\n");
+            *p_ptr = p;
             done = true;
         }
 	break;
 	case 17:
-#line 138 "memcached.rl"
-	{ printf("exptime\n"); s = p; }
+#line 137 "memcached.rl"
+	{ s = p; }
 	break;
 	case 18:
-#line 139 "memcached.rl"
-	{ if (mc_strtoul(s, p, &req->exptime) == -1) assert(0); }
+#line 138 "memcached.rl"
+	{
+                    if (mc_strtoul(s, p, &req->exptime) == -1)
+                        return -2;
+                }
 	break;
 	case 19:
-#line 141 "memcached.rl"
-	{ printf("flags\n"); s = p; }
+#line 143 "memcached.rl"
+	{ s = p; }
 	break;
 	case 20:
-#line 142 "memcached.rl"
-	{ if (mc_strtoul(s, p, &req->flags) == -1) assert(0); }
+#line 144 "memcached.rl"
+	{
+                    if (mc_strtoul(s, p, &req->flags) == -1)
+                        return -3;
+                }
 	break;
 	case 21:
-#line 144 "memcached.rl"
-	{ printf("bytes\n"); s = p; }
+#line 149 "memcached.rl"
+	{ s = p; }
 	break;
 	case 22:
-#line 145 "memcached.rl"
-	{ if (mc_strtoul(s, p, &req->bytes) == -1) assert(0); }
+#line 150 "memcached.rl"
+	{
+                    if (mc_strtoul(s, p, &req->bytes) == -1)
+                        return -4;
+                }
 	break;
 	case 23:
-#line 147 "memcached.rl"
-	{ printf("cas\n"); s = p; }
+#line 155 "memcached.rl"
+	{ s = p; }
 	break;
 	case 24:
-#line 148 "memcached.rl"
-	{ if (mc_strtoul(s, p, &req->cas) == -1) assert(0); }
+#line 156 "memcached.rl"
+	{
+                    if (mc_strtoul(s, p, &req->cas) == -1)
+                        return -5;
+                }
 	break;
 	case 25:
-#line 150 "memcached.rl"
-	{ printf("incr\n"); s = p; }
+#line 161 "memcached.rl"
+	{ s = p; }
 	break;
 	case 26:
-#line 151 "memcached.rl"
-	{ if (mc_strtoul(s, p, &req->inc_val) == -1) assert(0); }
+#line 162 "memcached.rl"
+	{
+                    if (mc_strtoul(s, p, &req->inc_val) == -1)
+                        return -6;
+                }
 	break;
 	case 27:
-#line 153 "memcached.rl"
-	{ printf("flush_delay\n"); s = p; }
+#line 167 "memcached.rl"
+	{ s = p; }
 	break;
 	case 28:
-#line 154 "memcached.rl"
-	{ if (mc_strtoul(s, p, &req->exptime) == -1) assert(0); }
+#line 168 "memcached.rl"
+	{
+                    if (mc_strtoul(s, p, &req->exptime) == -1)
+                        return -7;
+                }
 	break;
 	case 29:
-#line 156 "memcached.rl"
-	{ p++; printf("eof\n"); }
+#line 173 "memcached.rl"
+	{ p++; }
 	break;
 	case 30:
-#line 157 "memcached.rl"
-	{printf("spc\n");}
-	break;
-	case 31:
-#line 158 "memcached.rl"
+#line 175 "memcached.rl"
 	{ req->noreply = true; }
 	break;
-#line 789 "memcached.c"
+#line 793 "memcached.c"
 		}
 	}
 
@@ -798,20 +802,15 @@ _again:
 	_out: {}
 	}
 
-#line 189 "memcached.rl"
+#line 206 "memcached.rl"
+
 
 
     if (!done) {
-exit:
+        if (p == pe)
+            return 1;
         return -1;
     }
-    return 0;
-}
-
-int main() {
-    struct memcache_request req;
-    const char s[] = "replace notexist 0 0 6\r\nbarva2\r\n";
-    memcache_parse(&req, s, s + sizeof(s) - 1);
     return 0;
 }
 

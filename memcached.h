@@ -1,4 +1,4 @@
-enum memcache_op {
+enum mc_op {
 	MC_SET = 0,
 	MC_ADD,
 	MC_REPLACE,
@@ -16,8 +16,8 @@ enum memcache_op {
 	MC_QUIT,
 };
 
-struct memcache_request {
-	enum memcache_op op;
+struct mc_request {
+	enum mc_op op;
 	const char *key;
 	size_t      key_len;
 	uint32_t    key_count;
@@ -31,4 +31,6 @@ struct memcache_request {
 	bool        noreply;
 };
 
-int memcache_parse(struct memcache_request *req, const char *p, const char *pe);
+int mc_parse(struct mc_request *req,
+	     const char **p,
+	     const char *pe);

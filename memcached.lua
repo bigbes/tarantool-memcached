@@ -1,17 +1,18 @@
 local ffi = require('ffi')
-local yaml = require('yaml')
 
+local yaml = require('yaml')
 local socket = require('socket')
 local fiber = require('fiber')
 local log = require('log')
-local boxerr = require('errno')
-
+local boxerrno = require('errno')
 local fun = require('fun')
 
 local expd = require('expirationd')
 
 ffi.cdef(io.open('memcached.h', 'r'):read("*all"))
-
+ffi.cdef[[
+   void *memmove(void *dst, const void *src, size_t num);
+]]
 func = ffi.load('memctnt')
 
 local function dump_request(req)
@@ -20,36 +21,273 @@ local function dump_request(req)
    log.info('data: len(%d) - %s', req.data_len, ffi.string(req.data, req.data_len))
 end
 
-local function memcache_handler(srv, from)
-   srv:nonblock(1)
-   local buf = ''
-   while buf == '' do
-      local tmp_buf = srv:sysread(16384)
-      if (tmp_buf == nil and srv:errno() ~= boxerr.EAGAIN) then
-         error(srv:error())
-      elseif (tmp_buf and #tmp_buf > 0) then
-         buf = buf..tmp_buf
-         if string.sub(buf, -2) == '\r\n' then
-            break
+local buffer_err = {
+   ['EOK']    = 0,
+   ['EINVAL'] = 1,
+   ['ENOMEM'] = 2,
+}
+
+local buffer_strerr = {
+   [0] = [['Not an error']],
+   [1] = [['Bad value']],
+   [2] = [['Not enough memory']]
+}
+
+local buffer
+local buffer_mt = {
+   extend = function (self, needed)
+      self:pack()
+      local had = (self.size - self.woff)
+      if (had < needed) then
+         had = self.size * 2
+         while (had - self.woff < needed) do
+            had = had * 2
          end
+         self:_extend(had)
       end
-      require('fiber').sleep(0.1)
-   end
-
-   local req = ffi.new('struct memcache_request')
-   tp = ffi.cast('const char *', buf)
-
-   if (func.memcache_parse(req, tp, tp + #buf + 1) == -1) then
       return
+   end,
+
+   _extend = function (self, new_size)
+      if (new_size < self.size) then
+         self.error = buffer_err.EINVAL
+         return
+      end
+      local new_buf = ffi.new('char [?]', new_size)
+      if (new_buf == nil) then
+         self.error = buffer_err.ENOMEM
+         return
+      end
+      if (self.buffer ~= nil) then
+         ffi.copy(new_buf,
+                  self.buffer + self.roff,
+                  self.woff - self.roff)
+      end
+      self.woff   = self.woff - self.roff
+      self.roff   = 0
+      self.buffer = new_buf
+      self.size   = new_size
+   end,
+
+   strerror = function(self)
+      return buffer_strerr[self.error]
+   end,
+
+   write = function (self, str, str_size)
+      if type(str) == 'string' then
+         str_size = #str
+      end
+      if (self.size - self.woff) < str_size then
+         self:extend(str_size)
+      end
+      ffi.copy(self.buffer + self.woff,
+                str, str_size)
+      self.woff = self.woff + str_size
+   end,
+
+   wptr_get = function (self)
+      return self.buffer + self.woff
+   end,
+
+   read = function (self, size)
+      if (size == nil or size > self.woff - self.roff) then
+         size = self.woff - self.roff
+      end
+      return ffi.string(self.buffer + self.roff, size)
+   end,
+
+   rptr_get = function (self)
+      return self.buffer + self.roff
+   end,
+
+   pack = function(self)
+      if (self.roff == 0) then return end
+      if (self.roff ~= self.woff) then
+         ffi.C.memmove(self.buffer,
+                       self.buffer + self.roff,
+                       self.woff - self.roff)
+      end
+      self.woff = self.woff - self.roff
+      self.roff = 0
+      return
+   end,
+
+   recvfull = function(self, sckt)
+      return self:recv(sckt, self.size - self.woff)
+   end,
+
+   recv = function(self, sckt, size)
+      if not sckt:readable() then return -1 end
+      local retval = ffi.C.recv(sckt:fd(), self.buffer + self.woff, size, 0)
+      if retval == -1 then
+         self._errno = boxerrno()
+         return -1
+      end
+      self.woff = self.woff + retval
+      return retval
+   end,
+
+   sendall = function(self, sckt)
+      local pos      = self.roff
+      local to_write = (self.woff - self.roff)
+      while to_write > 0 do
+         if not sckt:writable() then return -1 end
+         local retval = ffi.C.send(sckt:fd(), self.buffer + pos, to_write, 0)
+         if retval == -1 then
+            self._errno = boxerrno()
+            return -1
+         end
+         to_write = to_write - retval
+         pos      = pos + retval
+      end
+      pos = pos - self.roff
+      self.roff = 0
+      self.woff = 0
+      return pos
    end
-   dump_request(req)
-end
+}
+
+local buffer = {
+   new = function ()
+      local self = setmetatable({}, { __index = buffer_mt })
+      self.size   = 16384
+      self.error  = buffer_err.EOK
+      self.roff   = 0
+      self.woff   = 0
+      self:_extend(self.size)
+      if (self.error ~= buffer_err.EOK) then
+         log.error('ERROR')
+         return
+      end
+      return self
+   end
+}
 
 local memcache
-local memcache_methods = {
+local memcache_mt = {
    init_loop = function(self, port)
-      self.srv = socket.tcp_server('0.0.0.0', port,
-         {handler = memcache_handler, name = 'memcached loop'}, 50)
+      local function memcache_handler(srv, from)
+--         srv:nonblock(1)
+         local rbuf  = buffer.new()
+         local wbuf  = buffer.new()
+         local p_ptr = ffi.new('const char *[1]');
+         local req   = ffi.new('struct mc_request')
+         while true do
+            rbuf:pack()
+            local size = rbuf:recvfull(srv)
+            if (tonumber(size) == 0) then return end
+            local tp = ffi.cast('const char *', rbuf:rptr_get())
+
+            p_ptr[0] = tp
+            while true do
+               if (p_ptr[0] == rbuf:wptr_get()) then
+                  break
+               end
+               local rval = func.mc_parse(req, p_ptr, rbuf:wptr_get())
+               local resp = nil
+               if (rval > 0) then break end
+               if (rval == -1 or rval == -3 or rval == -4 or rval == -5) then
+                  wbuf:write('CLIENT_ERROR bad command line format\r\n')
+                  return
+               elseif (rval == -2) then
+                  wbuf:write('CLIENT_ERROR invalid exptime argument\r\n')
+                  return
+               elseif (rval == -6) then
+                  wbuf:write('CLIENT_ERROR invalid numeric delta argument\r\n')
+                  return
+               elseif (rval == -7) then
+                  wbuf:write('CLIENT_ERROR bad data chunk\r\n')
+                  return
+               end
+
+               -- TODO:
+               -- Use binary buffer instead of response in lua string
+               resp = self:cmd_exec(req)
+               if (resp == nil) then
+                  log.info('requested exit')
+                  return nil
+               end
+               log.info('response %s', resp)
+               wbuf:write(resp)
+               rbuf.roff = p_ptr[0] - rbuf.buffer
+            end
+            wbuf:sendall(srv)
+         end
+      end
+      self.srv = socket.tcp_server('0.0.0.0', port, {
+            handler = memcache_handler,
+            name = 'memcached loop',
+      }, 50)
+   end,
+
+   cmd_exec = function(self, req)
+      if (req.op == ffi.C.MC_SET) then
+         return self:set(ffi.string(req.key, req.key_len),
+                         ffi.string(req.data, req.data_len),
+                         tonumber(req.exptime), tonumber(req.flags),
+                         tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_ADD) then
+         return self:add(ffi.string(req.key, req.key_len),
+                         ffi.string(req.data, req.data_len),
+                         tonumber(req.exptime), tonumber(req.flags),
+                         tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_REPLACE) then
+         return self:replace(ffi.string(req.key, req.key_len),
+                             ffi.string(req.data, req.data_len),
+                             tonumber(req.exptime), tonumber(req.flags),
+                             tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_PREPEND) then
+         return self:prepend(ffi.string(req.key, req.key_len),
+                              ffi.string(req.data, req.data_len),
+                              tonumber(req.exptime), tonumber(req.flags),
+                              tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_CAS) then
+         return self:cas(ffi.string(req.key, req.key_len),
+                           ffi.string(req.data, req.data_len),
+                           tonumber(req.cas), tonumber(req.exptime),
+                           tonumber(req.flags), tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_GET) then
+         local keys = ffi.string(req.key, req.key_len)
+         if (req.key_count > 1) then
+            local k = {};
+            for i in string.gmatch(keys, '%S+') do
+               table.insert(k, i)
+            end
+            keys = k
+         end
+         return self:get(keys)
+      elseif (req.op == ffi.C.MC_GETS) then
+         local keys = ffi.string(req.key, req.key_len)
+         if (req.key_count > 1) then
+            local k = {};
+            for i in string.gmatch(keys, '%S+') do
+               table.insert(k, i)
+            end
+            keys = k
+         end
+         return self:get(keys)
+      elseif (req.op == ffi.C.MC_DELETE) then
+         return self:cas(ffi.string(req.key, req.key_len),
+                           tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_INCR) then
+         return self:incr(ffi.string(req.key, req.key_len),
+                           tonumber(req.inc_val), tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_DECR) then
+         return self:decr(ffi.string(req.key, req.key_len),
+                           tonumber(req.inc_val), tonumber(req.noreply))
+      elseif (req.op == ffi.C.MC_FLUSH) then
+         return self:flush()
+      elseif (req.op == ffi.C.MC_STATS) then
+         -- Stat cmd currently is not implemented
+         return self:stats()
+      elseif (req.op == ffi.C.MC_VERSION) then
+         return self:version()
+      elseif (req.op == ffi.C.MC_QUIT) then
+         return nil
+      else
+         log.info('Processing undefined command')
+         return nil
+      end
    end,
 
    stat_incr = function(self, stat)
@@ -59,10 +297,9 @@ local memcache_methods = {
    get_tuple_or_expire = function(self, key)
       local tuple = self.mcs:get{key}
       if tuple == nil then return 'none' end
-      local time = math.floor(fiber.time())
-      local etime = tuple[3]
+      local time, etime, ptime = math.floor(fiber.time()), tuple[3], tuple[6]
       -- check for invalidation
-      if ((tuple[6] <= self.flush and self.flush <= time) or
+      if ((ptime <= self.flush and self.flush <= time) or
           (etime <= time and etime ~= 0)) then
          -- invalidate and free
          self.mcs:delete{key}
@@ -409,7 +646,7 @@ local memcache_methods = {
    end,
    flush_all = function(self, time)
       self:stat_incr('cmd_flush')
-      self.flush = self:normalize_exptime(time)
+      self.flush = math.max(self.flush, self:normalize_exptime(time))
       return 'OK\r\n'
    end,
    stats = function(self, key)
@@ -417,9 +654,6 @@ local memcache_methods = {
    end,
    version = function(self)
       return string.format('VERSION Tarantool Memcached %s', box.info().version)
-   end,
-   quit = function(self)
-      return ''
    end,
    destroy = function(self)
    end
@@ -447,7 +681,7 @@ end
 
 memcache = {
    new = function(name)
-      local self = setmetatable({}, { __index = memcache_methods })
+      local self = setmetatable({}, { __index = memcache_mt })
       self.name = name
       if box.space[name] == nil then
          local mcs = box.schema.space.create(name)
@@ -491,12 +725,12 @@ box.cfg{}
 
 a = memcache.new('mc')
 a:init_loop(1200)
-log.info(a:set('test1', 'value1', 2))
-log.info(a:set('test3', '12', 4))
-log.info(a:append('test1', 'end'))
-log.info(a:prepend('test1', 'begin'))
-log.info(a:get({'test1', 'test2'}))
-log.info(a:incr('test3', 1))
-log.info(a:decr('test3', 2))
-log.info(a:flush_all(10))
-log.info(require('yaml').encode(a.stats))
+--log.info(a:set('test1', 'value1', 2))
+--log.info(a:set('test3', '12', 4))
+--log.info(a:append('test1', 'end'))
+--log.info(a:prepend('test1', 'begin'))
+--log.info(a:get({'test1', 'test2'}))
+--log.info(a:incr('test3', 1))
+--log.info(a:decr('test3', 2))
+--log.info(a:flush_all(10))
+--log.info(require('yaml').encode(a.stats))
