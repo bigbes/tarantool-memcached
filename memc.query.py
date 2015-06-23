@@ -11,7 +11,7 @@ a.send('set notexist 0 0 2\r\nba\r\n')
 #print a.recv(1024)
 a.send('add notexis1 0 0 2\r\nba\r\n')
 time.sleep(0.1)
-print a.recv(1024)
+print a.recv(1024),
 a.send('get notexist notexis1\r\n')
 time.sleep(0.1)
-print a.recv(1024)
+print a.recv(1024),

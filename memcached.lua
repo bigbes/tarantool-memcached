@@ -10,6 +10,7 @@ local fun = require('fun')
 local expd = require('expirationd')
 
 ffi.cdef(io.open('memcached.h', 'r'):read("*all"))
+
 ffi.cdef[[
    void *memmove(void *dst, const void *src, size_t num);
 ]]
@@ -17,24 +18,28 @@ func = ffi.load('memctnt')
 
 local function dump_request(req)
    log.info('operation: %d', req.op)
-   log.info('key: %d, len(%d) - %s', req.key_count, req.key_len, ffi.string(req.key, req.key_len))
-   log.info('data: len(%d) - %s', req.data_len, ffi.string(req.data, req.data_len))
+   log.info('keys: %d, len(%d) - %s',
+      tonumber(req.key_count),
+      tonumber(req.key_len),
+      ffi.string(req.key, req.key_len))
+   log.info('data: len(%d) - %s',
+      tonumber(req.data_len),
+      ffi.string(req.data, req.data_len))
 end
 
 local buffer_err = {
    ['EOK']    = 0,
    ['EINVAL'] = 1,
-   ['ENOMEM'] = 2,
+   ['ENOMEM'] = 2
 }
 
 local buffer_strerr = {
-   [0] = [['Not an error']],
-   [1] = [['Bad value']],
-   [2] = [['Not enough memory']]
+   [0] = 'Not an error',
+   [1] = 'Bad value',
+   [2] = 'Not enough memory'
 }
 
-local buffer
-local buffer_mt = {
+local buffer_methods = {
    extend = function (self, needed)
       self:pack()
       local had = (self.size - self.woff)
@@ -83,6 +88,44 @@ local buffer_mt = {
       ffi.copy(self.buffer + self.woff,
                 str, str_size)
       self.woff = self.woff + str_size
+      return str_size
+   end,
+
+   write_ans  = function (self, str, str_size)
+      if type(str) == 'string' then
+         str_size = #str
+      end
+      local written = self:write(str, str_size)
+      written = written + self:write('\r\n')
+      return written
+   end,
+
+   write_seer = function (self, str, str_size)
+      if type(str) == 'string' then
+         str_size = #str
+      end
+      local written = self:write('SERVER_ERROR ')
+      written = written + self:write(str, str_size)
+      written = written + self:write('\r\n')
+      return written
+   end,
+
+   write_cler = function (self, str, str_size)
+      if type(str) == 'string' then
+         str_size = #str
+      end
+      local written = self:write('CLIENT_ERROR ')
+      written = written + self:write(str, str_size)
+      written = written + self:write('\r\n')
+      return written
+   end,
+
+   write_err = function (self)
+      if type(str) == 'string' then
+         str_size = #str
+      end
+      local written = self:write('ERROR\r\n')
+      return written
    end,
 
    wptr_get = function (self)
@@ -144,12 +187,16 @@ local buffer_mt = {
       self.roff = 0
       self.woff = 0
       return pos
+   end,
+   log = function(self, str)
+      log.info('%s buffer: \'%s\'',
+         str, ffi.string(self:rptr_get(), self.woff - self.roff))
    end
 }
 
 local buffer = {
    new = function ()
-      local self = setmetatable({}, { __index = buffer_mt })
+      local self = setmetatable({}, { __index = buffer_methods })
       self.size   = 16384
       self.error  = buffer_err.EOK
       self.roff   = 0
@@ -163,89 +210,119 @@ local buffer = {
    end
 }
 
-local memcache
-local memcache_mt = {
+local memcached_methods = {
+   stop_loop = function(self)
+      if self.srv then
+         self.srv:close()
+         self.srv = nil
+      end
+   end,
+
    init_loop = function(self, port)
       local function memcache_handler(srv, from)
---         srv:nonblock(1)
          local rbuf  = buffer.new()
          local wbuf  = buffer.new()
-         local p_ptr = ffi.new('const char *[1]');
+         local p_ptr = ffi.new('const char *[1]')
          local req   = ffi.new('struct mc_request')
+         local size  = 0
+         local rval  = 0
+         local resp  = 0
          while true do
             rbuf:pack()
-            local size = rbuf:recvfull(srv)
-            if (tonumber(size) == 0) then return end
+            size = rbuf:recvfull(srv)
+            rbuf:log("Input")
+            log.info(tostring(size))
+            if (size == nil) then break end
             local tp = ffi.cast('const char *', rbuf:rptr_get())
 
             p_ptr[0] = tp
             while true do
                if (p_ptr[0] == rbuf:wptr_get()) then
+                  resp = nil
                   break
                end
-               local rval = func.mc_parse(req, p_ptr, rbuf:wptr_get())
-               local resp = nil
-               if (rval > 0) then break end
-               if (rval == -1 or rval == -3 or rval == -4 or rval == -5) then
-                  wbuf:write('CLIENT_ERROR bad command line format\r\n')
-                  return
+               rval = func.mc_parse(req, p_ptr, rbuf:wptr_get())
+               log.info('Parsing result: '..tostring(rval))
+               log.info(tostring(req.op))
+               --dump_request(req)
+               if (rval > 0) then
+                  break
+               elseif (rval == -1 and req.op == 0) then
+                  wbuf:write_err()
+                  break
+               elseif (rval == -1 or rval == -3 or rval == -4 or rval == -5) then
+                  wbuf:write_cler('bad command line format')
+                  break
                elseif (rval == -2) then
-                  wbuf:write('CLIENT_ERROR invalid exptime argument\r\n')
-                  return
+                  wbuf:write_cler('invalid exptime argument')
+                  break
                elseif (rval == -6) then
-                  wbuf:write('CLIENT_ERROR invalid numeric delta argument\r\n')
-                  return
+                  wbuf:write_cler('invalid numeric delta argument')
+                  break
                elseif (rval == -7) then
-                  wbuf:write('CLIENT_ERROR bad data chunk\r\n')
-                  return
+                  wbuf:write_cler('bad data chunk')
+                  break
                end
 
-               -- TODO:
-               -- Use binary buffer instead of response in lua string
-               resp = self:cmd_exec(req)
-               if (resp == nil) then
-                  log.info('requested exit')
-                  return nil
+               resp = self:cmd_exec(req, wbuf)
+               log.info('response_stat: '..tostring(resp))
+               if (resp == 'exit') then
+                  break
                end
-               log.info('response %s', resp)
-               wbuf:write(resp)
                rbuf.roff = p_ptr[0] - rbuf.buffer
             end
+            wbuf:log("Output")
             wbuf:sendall(srv)
+            if (rval < 0 or resp == 'clerr') then
+               log.info('Client error, exiting')
+               return
+            elseif (resp == 'exit') then
+               log.info('Client requested exit')
+               return
+            elseif (size == nil) then
+               log.info('Socker error, exiting')
+               return
+            end
          end
       end
       self.srv = socket.tcp_server('0.0.0.0', port, {
             handler = memcache_handler,
-            name = 'memcached loop',
-      }, 50)
+            name = 'memcache loop',
+         }, 50)
    end,
 
-   cmd_exec = function(self, req)
+   -- TODO:
+   -- Move get/gets (not splitting keys, instead use ffi.string and e.t.c.)
+   cmd_exec = function(self, req, outbuf)
       if (req.op == ffi.C.MC_SET) then
          return self:set(ffi.string(req.key, req.key_len),
                          ffi.string(req.data, req.data_len),
                          tonumber(req.exptime), tonumber(req.flags),
-                         tonumber(req.noreply))
+                         tonumber(req.noreply), outbuf)
       elseif (req.op == ffi.C.MC_ADD) then
          return self:add(ffi.string(req.key, req.key_len),
                          ffi.string(req.data, req.data_len),
                          tonumber(req.exptime), tonumber(req.flags),
-                         tonumber(req.noreply))
+                         tonumber(req.noreply), outbuf)
       elseif (req.op == ffi.C.MC_REPLACE) then
          return self:replace(ffi.string(req.key, req.key_len),
                              ffi.string(req.data, req.data_len),
                              tonumber(req.exptime), tonumber(req.flags),
-                             tonumber(req.noreply))
+                             tonumber(req.noreply), outbuf)
+      elseif (req.op == ffi.C.MC_APPEND) then
+         return self:append(ffi.string(req.key, req.key_len),
+                              ffi.string(req.data, req.data_len),
+                              tonumber(req.noreply), outbuf)
       elseif (req.op == ffi.C.MC_PREPEND) then
          return self:prepend(ffi.string(req.key, req.key_len),
                               ffi.string(req.data, req.data_len),
-                              tonumber(req.exptime), tonumber(req.flags),
-                              tonumber(req.noreply))
+                              tonumber(req.noreply), outbuf)
       elseif (req.op == ffi.C.MC_CAS) then
          return self:cas(ffi.string(req.key, req.key_len),
                            ffi.string(req.data, req.data_len),
                            tonumber(req.cas), tonumber(req.exptime),
-                           tonumber(req.flags), tonumber(req.noreply))
+                           tonumber(req.flags), tonumber(req.noreply),
+                           outbuf)
       elseif (req.op == ffi.C.MC_GET) then
          local keys = ffi.string(req.key, req.key_len)
          if (req.key_count > 1) then
@@ -255,7 +332,7 @@ local memcache_mt = {
             end
             keys = k
          end
-         return self:get(keys)
+         return self:get(keys, outbuf)
       elseif (req.op == ffi.C.MC_GETS) then
          local keys = ffi.string(req.key, req.key_len)
          if (req.key_count > 1) then
@@ -265,28 +342,31 @@ local memcache_mt = {
             end
             keys = k
          end
-         return self:get(keys)
+         return self:gets(keys, outbuf)
       elseif (req.op == ffi.C.MC_DELETE) then
-         return self:cas(ffi.string(req.key, req.key_len),
-                           tonumber(req.noreply))
+         return self:delete(ffi.string(req.key, req.key_len),
+                         tonumber(req.noreply), outbuf)
       elseif (req.op == ffi.C.MC_INCR) then
          return self:incr(ffi.string(req.key, req.key_len),
-                           tonumber(req.inc_val), tonumber(req.noreply))
+                          tonumber(req.inc_val), tonumber(req.noreply),
+                          outbuf)
       elseif (req.op == ffi.C.MC_DECR) then
          return self:decr(ffi.string(req.key, req.key_len),
-                           tonumber(req.inc_val), tonumber(req.noreply))
+                          tonumber(req.inc_val), tonumber(req.noreply),
+                          outbuf)
       elseif (req.op == ffi.C.MC_FLUSH) then
-         return self:flush()
+         return self:flush(outbuf)
       elseif (req.op == ffi.C.MC_STATS) then
          -- Stat cmd currently is not implemented
-         return self:stats()
+         return self:stats(ffi.string(req.key, req.key_len), outbuf)
       elseif (req.op == ffi.C.MC_VERSION) then
-         return self:version()
+         return self:version(outbuf)
       elseif (req.op == ffi.C.MC_QUIT) then
-         return nil
+         return 'exit'
       else
+         outbuf:write_err()
          log.info('Processing undefined command')
-         return nil
+         return 'exit'
       end
    end,
 
@@ -321,43 +401,30 @@ local memcache_mt = {
    ----
    -- store this data
    ----
-   set = function(self, key, value, exptime, flags, noreply)
+   set = function(self, key, value, exptime, flags, noreply, outbuf)
       -- Check arguments
-      assert(key ~= nil and value ~= nil)
-      key = tostring(key)
-      value = tostring(value)
+      key, value = tostring(key), tostring(value)
       exptime = self:normalize_exptime(exptime)
-      flags = flags or 0
-      if type(flags) ~= 'number' or flags < 0 or flags > 4294967296 then
-         return 'CLIENT_ERROR Bad flags value\r\n'
-      end
-      if noreply == nil or type(noreply) ~= 'boolean' then noreply = false end
       -- Execute requests
-      local cas = self.cas; self.cas = self.cas + 1
+      local cas = self.casn; self.casn = self.casn + 1
       local ptime = math.floor(fiber.time())
       self:stat_incr('cmd_set')
       self.mcs:replace{key, value, exptime, flags, cas, ptime}
-      if noreply == true then return '' end
-      return 'STORED\r\n'
+      if noreply == true then return 0 end
+      outbuf:write_ans('STORED')
+      return 0
    end,
 
    ----
    -- store this data, but only if the server *doesn't* already
    -- hold data for this key
    ----
-   add = function(self, key, value, exptime, flags, noreply)
+   add = function(self, key, value, exptime, flags, noreply, outbuf)
       -- Check arguments
-      assert(key ~= nil and value ~= nil)
-      key = tostring(key)
-      value = tostring(value)
+      key, value = tostring(key), tostring(value)
       exptime = self:normalize_exptime(exptime)
-      flags = flags or 0
-      if type(flags) ~= 'number' or flags < 0 or flags > 4294967296 then
-         return 'CLIENT_ERROR Bad flags value\r\n'
-      end
-      if noreply == nil or type(noreply) ~= 'boolean' then noreply = false end
       -- Execute requests
-      local cas = self.cas; self.cas = self.cas + 1
+      local cas = self.casn; self.casn = self.casn + 1
       local ptime = math.floor(fiber.time())
       self:stat_incr('cmd_set')
       box.begin()
@@ -366,33 +433,25 @@ local memcache_mt = {
          self.mcs:replace{key, value, exptime, flags, cas, ptime}
       end
       box.commit()
-      if noreply == true then return '' end
-      if tuple ~= nil then return 'NOT_STORED\r\n' end
-      return 'STORED\r\n'
+      if noreply == true then return end
+      if tuple ~= nil then
+         outbuf:write_ans('NOT_STORED')
+      else
+         outbuf:write_ans('STORED')
+      end
+      return 0
    end,
 
    ----
    -- store this data, but only if the server *does*
    -- already hold data for this key
    ----
-   replace = function(self, key, value, exptime, flags, noreply)
+   replace = function(self, key, value, exptime, flags, noreply, outbuf)
       -- Check arguments
-      -- if key == nil then return 'CLIENT_ERROR Bad key\r\n' end
-      -- if value == nil then return 'CLIENT_ERROR Bad value\r\n' end
-      -- exptime = exptime or 0
-      -- if type(exptime) ~= 'number' or (exptime < (24*60*60) and exptime > 0) then
-         -- exptime = math.floor(fiber.time()) + exptime
-      -- end
-      -- flags = flags or 0
-      -- if type(flags) ~= 'number' or flags < 0 or flags > 4294967296 then
-         -- return 'CLIENT_ERROR Bad flags value\r\n'
-      -- end
-      -- if noreply == nil then noreply = false end
-      -- if type(noreply) ~= 'boolean' then
-         -- return 'CLIENT_ERROR Bad type of noreply flag\r\n'
-      -- end
+      key, value = tostring(key), tostring(value)
+      exptime = self:normalize_exptime(exptime)
       -- Execute requests
-      local cas = self.cas; self.cas = self.cas + 1
+      local cas = self.casn; self.casn = self.casn + 1
       local ptime = math.floor(fiber.time())
       self:stat_incr('cmd_set')
       box.begin()
@@ -401,24 +460,20 @@ local memcache_mt = {
          self.mcs:replace{key, value, exptime, flags, cas, ptime}
       end
       box.commit()
-      if noreply == true then return '' end
-      if tuple == nil then return 'NOT_STORED\r\n' end
-      return 'STORED\r\n'
+      if noreply == true then return end
+      if tuple == nil then
+         outbuf:write_ans('NOT_STORED')
+      else
+         outbuf:write_ans('STORED')
+      end
+      return 0
    end,
 
-   append = function(self, key, value, exptime, flags, noreply)
+   append = function(self, key, value, noreply, outbuf)
       -- Check arguments
-      assert(key ~= nil and value ~= nil)
-      key = tostring(key)
-      value = tostring(value)
-      exptime = self:normalize_exptime(exptime)
-      flags = flags or 0
-      if type(flags) ~= 'number' or flags < 0 or flags > 4294967296 then
-         return 'CLIENT_ERROR Bad flags value\r\n'
-      end
-      if noreply == nil or type(noreply) ~= 'boolean' then noreply = false end
+      key, value = tostring(key), tostring(value)
       -- Execute requests
-      local cas = self.cas; self.cas = self.cas + 1
+      local cas = self.casn; self.casn = self.casn + 1
       self:stat_incr('cmd_set')
       box.begin()
       local tuple = self:get_tuple_or_expire(key)
@@ -426,24 +481,20 @@ local memcache_mt = {
          {':', 2, -1, 0, value}, {'=', 5, cas}
       })
       box.commit()
-      if noreply == true then return '' end
-      if t == nil then return 'NOT_STORED\r\n' end
-      return 'STORED\r\n'
+      if noreply == true then return end
+      if t == nil then
+         outbuf:write_ans('NOT_STORED')
+      else
+         outbuf:write_ans('STORED')
+      end
+      return 0
    end,
 
-   prepend = function(self, key, value, exptime, flags, noreply)
+   prepend = function(self, key, value, noreply, outbuf)
       -- Check arguments
-      assert(key ~= nil and value ~= nil)
-      key = tostring(key)
-      value = tostring(value)
-      exptime = self:normalize_exptime(exptime)
-      flags = flags or 0
-      if type(flags) ~= 'number' or flags < 0 or flags > 4294967296 then
-         return 'CLIENT_ERROR Bad flags value\r\n'
-      end
-      if noreply == nil or type(noreply) ~= 'boolean' then noreply = false end
+      key, value = tostring(key), tostring(value)
       -- Execute requests
-      local cas = self.cas; self.cas = self.cas + 1
+      local cas = self.casn; self.casn = self.casn + 1
       self:stat_incr('cmd_set')
       box.begin()
       local tuple = self:get_tuple_or_expire(key)
@@ -451,28 +502,25 @@ local memcache_mt = {
          {':', 2, 1, 0, value}, {'=', 5, cas}
       })
       box.commit()
-      if noreply == true then return '' end
-      if t == nil then return 'NOT_STORED\r\n' end
-      return 'STORED\r\n'
+      if noreply == true then return end
+      if t == nil then
+         outbuf:write_ans('NOT_STORED')
+      else
+         outbuf:write_ans('STORED')
+      end
+      return 0
    end,
 
    ----
    -- check and set operation which means "store this data but
    -- only if no one else has updated since I last fetched it."
    ----
-   cas = function(self, key, value, cas, exptime, flags, noreply)
+   cas = function(self, key, value, cas, exptime, flags, noreply, outbuf)
       -- Check arguments
-      assert(key ~= nil and value ~= nil)
-      key = tostring(key)
-      value = tostring(value)
+      key, value = tostring(key), tostring(value)
       exptime = self:normalize_exptime(exptime)
-      flags = flags or 0
-      if type(flags) ~= 'number' or flags < 0 or flags > 4294967296 then
-         return 'CLIENT_ERROR Bad flags value\r\n'
-      end
-      if noreply == nil or type(noreply) ~= 'boolean' then noreply = false end
       -- Execute requests
-      local ncas = self.cas; self.cas = self.cas + 1
+      local ncas = self.casn; self.casn = self.casn + 1
       local ptime = math.floor(fiber.time())
       box.begin()
       local tuple = self:get_tuple_or_expire(key)
@@ -489,56 +537,61 @@ local memcache_mt = {
       box.commit()
 
       if type(tuple) == 'string' then
-         return 'NOT_FOUND\r\n'
+         outbuf:write_ans('NOT_FOUND')
       elseif tuple[5] ~= cas then
-         return 'EXISTS\r\n'
+         outbuf:write_ans('EXISTS')
+      else
+         outbuf:write_ans('STORED')
       end
-      return 'STORED\r\n'
+      return 0
    end,
 
-   get = function(self, keys)
+   get = function(self, keys, outbuf)
       -- Check arguments
       -- if keys == nil then return 'CLIENT_ERROR Bad key\r\n' end
       -- Execute requests
-      local resp = ''
       if type(keys) ~= 'table' then keys = {keys} end
       box.begin()
       for _, key in ipairs(keys) do
          local t = self:get_tuple_or_expire(key)
          if (type(t) ~= 'string') then
-            resp = resp .. string.format('VALUE %s %d %d \r\n%s\r\n',
-               t[1], t[4], #t[2], t[2])
+            local resp = string.format('VALUE %s %d %d', t[1], tostring(t[4]), #t[2])
+            outbuf:write_ans(resp)
+            outbuf:write_ans(t[2])
             self:stat_incr('get_hits')
          else
             self:stat_incr('get_misses')
          end
       end
       box.commit()
-      return resp .. 'END\r\n'
+      outbuf:write_ans('END')
+      return 0
    end,
 
-   gets = function(self, keys)
+   gets = function(self, keys, outbuf)
       -- Check arguments
       -- if keys == nil then return 'CLIENT_ERROR Bad key\r\n' end
       -- Execute requests
-      local resp = ''
       if type(keys) ~= 'table' then keys = {keys} end
       box.begin()
-      for k, v in ipairs(keys) do
+      for _, key in ipairs(keys) do
          local t = self:get_tuple_or_expire(key)
          if (type(t) ~= 'string') then
-            resp = resp .. string.format('VALUE %s %d %d %d\r\n%s\r\n',
-               t[1], t[4], #t[2], t[5], t[2])
+            local resp = string.format('VALUE %s %d %d %d',
+                                       t[1], t[4], #t[2], t[5])
+            outbuf:write_ans(resp)
+            outbuf:write_ans(t[2])
             self:stat_incr('get_hits')
          else
             self:stat_incr('get_misses')
          end
       end
       box.commit()
-      return resp .. 'END\r\n'
+      outbuf:write_ans('END')
+      return 0
    end,
 
-   delete = function(self, key, noreply)
+   delete = function(self, key, noreply, outbuf)
       -- Check arguments
       -- if key == nil then return 'CLIENT_ERROR Bad key\r\n' end
       -- if noreply == nil then noreply = false end
@@ -555,12 +608,16 @@ local memcache_mt = {
          self:stat_incr('delete_hits')
       end
       box.commit()
-      if noreply == true then return '' end
-      if err == nil then return 'NOT_FOUND\r\n' end
-      return 'DELETED\r\n'
+      if noreply == true then return end
+      if err == nil then
+         outbuf:write_ans('NOT_FOUND')
+      else
+         outbuf:write_ans('DELETED')
+      end
+      return 0
    end,
 
-   incr = function(self, key, value, noreply)
+   incr = function(self, key, value, noreply, outbuf)
       -- Check arguments
       -- if key == nil then return 'CLIENT_ERROR Bad key\r\n' end
       -- if value == nil then return 'CLIENT_ERROR Bad value\r\n' end
@@ -569,7 +626,7 @@ local memcache_mt = {
          -- return 'CLIENT_ERROR Bad type of noreply flag\r\n'
       -- end
       -- Execute requests
-      local cas = self.cas; self.cas = self.cas + 1
+      local cas = self.casn; self.casn = self.casn + 1
       box.begin()
       local t, tuple = self:get_tuple_or_expire(key)
       if type(tuple) == 'string' then
@@ -578,18 +635,22 @@ local memcache_mt = {
          self:stat_incr('incr_hits')
          num = tonumber(t[2])
          if num == nil then
-            return 'CLIENT_ERROR cannot increment or decrement non-numeric value\r\n'
+            outbuf:write_cler('cannot increment or decrement non-numeric value')
+            return 'clerr'
          end
          num = tostring(num + value)
          t = self.mcs:update({key}, {{'=', 2, num}, {'=', 5, cas}})
       end
       box.commit()
-      if noreply == true then return '' end
-      if type(tuple) == 'string' then return 'NOT_FOUND\r\n' end
-      return string.format('%d\r\n', t[2])
+      if noreply == true then return end
+      if type(tuple) == 'string' then
+         outbuf:write_ans('NOT_FOUND')
+      end
+      outbuf:write_ans(string.format('%d', t[2]))
+      return 0
    end,
 
-   decr = function(self, key, value, noreply)
+   decr = function(self, key, value, noreply, outbuf)
       -- Check arguments
       -- if key == nil then return 'CLIENT_ERROR Bad key\r\n' end
       -- if value == nil then return 'CLIENT_ERROR Bad value\r\n' end
@@ -598,7 +659,7 @@ local memcache_mt = {
          -- return 'CLIENT_ERROR Bad type of noreply flag\r\n'
       -- end
       -- Execute requests
-      local cas = self.cas; self.cas = self.cas + 1
+      local cas = self.casn; self.casn = self.casn + 1
       box.begin()
       local t, tuple = self:get_tuple_or_expire(key)
       if type(tuple) == 'string' then
@@ -607,28 +668,25 @@ local memcache_mt = {
          self:stat_incr('decr_hits')
          num = tonumber(t[2])
          if num == nil then
-            return 'CLIENT_ERROR cannot increment or decrement non-numeric value\r\n'
+            outbuf:write_cler('cannot increment or decrement non-numeric value')
+            return 'clerr'
          end
          num = tostring(num - value)
          t = self.mcs:update({key}, {{'=', 2, value}, {'=', 5, cas}})
       end
       box.commit()
-      if noreply == true then return '' end
-      if type(tuple) == 'string' then return 'NOT_FOUND\r\n' end
-      return string.format('%d\r\n', t[2])
+      if noreply == true then return end
+      if type(tuple) == 'string' then
+         outbuf:write_ans('NOT_FOUND')
+      end
+      outbuf:write_ans(string.format('%d', t[2]))
+      return 0
    end,
 
-   touch = function(self, key, exptime, noreply)
+   touch = function(self, key, exptime, noreply, outbuf)
       -- Check arguments
-      -- if key == nil then return 'CLIENT_ERROR Bad key\r\n' end
-      -- exptime = exptime or 0
-      -- if type(exptime) ~= 'number' or (exptime < (24*60*60) and exptime > 0) then
-         -- exptime = math.floor(fiber.time()) + exptime
-      -- end
-      -- if noreply == nil then noreply = false end
-      -- if type(noreply) ~= 'boolean' then
-         -- return 'CLIENT_ERROR Bad type of noreply flag\r\n'
-      -- end
+      key = tostring(key)
+      exptime = self:normalize_exptime(time)
       -- Execute requests
       self:stat_incr('cmd_touch')
       box.begin()
@@ -640,22 +698,48 @@ local memcache_mt = {
          t = self.mcs:update({key}, {{'=', 3, exptime}})
       end
       box.commit()
-      if noreply == true then return '' end
-      if type(tuple) == 'string' then return 'NOT_FOUND\r\n' end
-      return 'TOUCHED\r\n'
+      if noreply == true then return end
+      if type(tuple) == 'string' then
+         outbuf:write_ans('NOT_FOUND')
+      else
+         outbuf:write_ans('TOUCHED')
+      end
+      return 0
    end,
-   flush_all = function(self, time)
+
+   flush_all = function(self, time, outbuf)
       self:stat_incr('cmd_flush')
       self.flush = math.max(self.flush, self:normalize_exptime(time))
-      return 'OK\r\n'
+      outbuf:write_ans('OK')
+      return 0
    end,
-   stats = function(self, key)
-      return ''
+
+   stats = function(self, key, outbuf)
+      if (key == nil or #key == 0) then
+         for k, v in ipairs(self.stats) do
+            outbuf:write_ans(string.format('STAT %s %d', k, v))
+         end
+      else
+         if self.stats[key] then
+            outbuf:write_ans(string.format('STAT %s %d', key, self.stats[key]))
+         end
+      end
+      outbuf:write_ans('END')
+      return 0
    end,
+
    version = function(self)
-      return string.format('VERSION Tarantool Memcached %s', box.info().version)
+      outbuf:write_ans(
+         string.format('VERSION Tarantool %s', box.info().version)
+      )
+      return 0
    end,
+
    destroy = function(self)
+      mc:stop_loop()
+      expd.kill_task(self.expd)
+      expd.mcs:drop()
+      box.space._schema:delete{self.name}
    end
 }
 
@@ -679,21 +763,21 @@ local function mc_pr_expired(space_id, args, tuple)
    box.space[space_id]:delete(key)
 end
 
-memcache = {
+local memcached = {
    new = function(name)
-      local self = setmetatable({}, { __index = memcache_mt })
+      local self = setmetatable({}, { __index = memcached_methods })
       self.name = name
-      if box.space[name] == nil then
-         local mcs = box.schema.space.create(name)
+      if box.space[self.name] == nil then
+         local mcs = box.schema.space.create(self.name)
          mcs:create_index('primary', {type='HASH', parts={1, 'STR'}})
-      elseif box.space._schema:get{name} == nil then
+      elseif box.space._schema:get{self.name} == nil then
          error('memcached: space is already used')
       end
-      self.mcs = box.space[name]
-      self.cas = 0
+      self.mcs = box.space[self.name]
+      self.casn = 0
       self.flush = -1
-      self.expd = 'memcached_' .. name
-      expd.run_task(self.expd, name, mc_is_expired,
+      self.expd = 'memcached_' .. self.name
+      expd.run_task(self.expd, self.name, mc_is_expired,
                     mc_pr_expired, self, 1024, 60*60)
       self.stats = {
          ['cmd_get'] = 0,
@@ -716,21 +800,10 @@ memcache = {
          ['expired_daemon'] = 0,
          ['expired_runtime'] = 0,
       }
-      box.space._schema:put{name}
+      box.space._schema:put{self.name}
       return self
    end
 }
 
-box.cfg{}
-
-a = memcache.new('mc')
-a:init_loop(1200)
---log.info(a:set('test1', 'value1', 2))
---log.info(a:set('test3', '12', 4))
---log.info(a:append('test1', 'end'))
---log.info(a:prepend('test1', 'begin'))
---log.info(a:get({'test1', 'test2'}))
---log.info(a:incr('test3', 1))
---log.info(a:decr('test3', 2))
---log.info(a:flush_all(10))
---log.info(require('yaml').encode(a.stats))
+log.info(type(memcached))
+return memcached

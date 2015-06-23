@@ -58,49 +58,6 @@ mc_parse(struct mc_request *req, const char **p_ptr, const char *pe) {
 
     memset(req, 0, sizeof(struct mc_request));
     %%{
-        action set {
-            req->op = MC_SET;
-        }
-        action add {
-            req->op = MC_ADD;
-        }
-        action replace {
-            req->op = MC_REPLACE;
-        }
-        action append {
-            req->op = MC_APPEND;
-        }
-        action prepend {
-            req->op = MC_PREPEND;
-        }
-        action cas {
-            req->op = MC_CAS;
-        }
-        action get {
-            req->op = MC_GET;
-        }
-        action gets {
-            req->op = MC_GETS;
-        }
-        action delete {
-            req->op = MC_DELETE;
-        }
-        action incr {
-            req->op = MC_INCR;
-        }
-        action decr {
-            req->op = MC_DECR;
-        }
-        action flush_all {
-            req->op = MC_FLUSH;
-        }
-        action stats {
-            req->op = MC_STATS;
-        }
-        action quit {
-            req->op = MC_QUIT;
-        }
-
         action key_start {
             s = p;
             for (; p < pe && *p != ' ' && *p != '\r' && *p != '\n'; p++);
@@ -135,40 +92,22 @@ mc_parse(struct mc_request *req, const char **p_ptr, const char *pe) {
 
         exptime = digit+
                 >{ s = p; }
-                %{
-                    if (mc_strtoul(s, p, &req->exptime) == -1)
-                        return -2;
-                };
+                %{ if (mc_strtoul(s, p, &req->exptime) == -1) return -2; };
         flags = digit+
                 >{ s = p; }
-                %{
-                    if (mc_strtoul(s, p, &req->flags) == -1)
-                        return -3;
-                };
+                %{ if (mc_strtoul(s, p, &req->flags) == -1) return -3; };
         bytes = digit+
                 >{ s = p; }
-                %{
-                    if (mc_strtoul(s, p, &req->bytes) == -1)
-                        return -4;
-                };
+                %{ if (mc_strtoul(s, p, &req->bytes) == -1) return -4; };
         cas_value = digit+
                 >{ s = p; }
-                %{
-                    if (mc_strtoul(s, p, &req->cas) == -1)
-                        return -5;
-                };
+                %{ if (mc_strtoul(s, p, &req->cas) == -1) return -5; };
         incr_value = digit+
                 >{ s = p; }
-                %{
-                    if (mc_strtoul(s, p, &req->inc_val) == -1)
-                        return -6;
-                };
+                %{ if (mc_strtoul(s, p, &req->inc_val) == -1) return -6; };
         flush_delay = digit+
                 >{ s = p; }
-                %{
-                    if (mc_strtoul(s, p, &req->exptime) == -1)
-                        return -7;
-                };
+                %{ if (mc_strtoul(s, p, &req->exptime) == -1) return -7; };
 
         eol = ("\r\n" | "\n") @{ p++; };
         spc = " "+;
@@ -181,25 +120,26 @@ mc_parse(struct mc_request *req, const char **p_ptr, const char *pe) {
         cr_body    = spc key spc incr_value                                noreply spc? eol;
         flush_body = (spc flush_delay)?                                    noreply spc? eol;
 
-        set     = ("set"i store_body)     @read_data @done @set;
-        add     = ("add"i store_body)     @read_data @done @add;
-        replace = ("replace"i store_body) @read_data @done @replace;
-        append  = ("append"i  store_body) @read_data @done @append;
-        prepend = ("prepend"i store_body) @read_data @done @prepend;
-        cas     = ("cas"i cas_body)       @read_data @done @cas;
+        set     = ("set"i     %{req->op = MC_SET;}     store_body) @read_data @done;
+        add     = ("add"i     %{req->op = MC_ADD;}     store_body) @read_data @done;
+        replace = ("replace"i %{req->op = MC_REPLACE;} store_body) @read_data @done;
+        append  = ("append"i  %{req->op = MC_APPEND;}  store_body) @read_data @done;
+        prepend = ("prepend"i %{req->op = MC_PREPEND;} store_body) @read_data @done;
+        cas     = ("cas"i     %{req->op = MC_CAS;}     cas_body)   @read_data @done;
 
-        get     = ("get"i    get_body) @done @get;
-        gets    = ("gets"i   get_body) @done @gets;
-        delete  = ("delete"i del_body) @done @delete;
-        incr    = ("incr"i   cr_body)  @done @incr;
-        decr    = ("decr"i   cr_body)  @done @decr;
+        get     = ("get"i    %{req->op = MC_GET;}    get_body) @done;
+        gets    = ("gets"i   %{req->op = MC_GETS;}   get_body) @done;
+        delete  = ("delete"i %{req->op = MC_DELETE;} del_body) @done;
+        incr    = ("incr"i   %{req->op = MC_INCR;}   cr_body)  @done;
+        decr    = ("decr"i   %{req->op = MC_DECR;}   cr_body)  @done;
 
-        stats = "stats"i eol @done @stats;
-        flush_all = "flush_all"i flush_body @done @flush_all;
-        quit = "quit"i eol @done @quit;
+        stats     = "stats"i     %{req->op = MC_STATS;} eol        @done;
+        flush_all = "flush_all"i %{req->op = MC_FLUSH;} flush_body @done;
+        quit      = "quit"i      %{req->op = MC_QUIT;}  eol        @done;
 
-        main := set | cas | add | replace | append | prepend | get | gets |
-                delete | incr | decr | stats | flush_all | quit;
+        main := set | add | replace | append | prepend | cas |
+                get | gets | delete | incr | decr |
+                stats | flush_all | quit;
 
         write init;
         write exec;

@@ -1,5 +1,5 @@
 enum mc_op {
-	MC_SET = 0,
+	MC_SET = 1,
 	MC_ADD,
 	MC_REPLACE,
 	MC_APPEND,
