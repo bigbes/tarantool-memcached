@@ -1,8 +1,13 @@
 *.dylib
 *.dylib.dSYM
+*.so
+
 *.snap
 *.xlog
 *.reject
 var
 .*.swp
 *.pyc
+
+*.dot
+*.png

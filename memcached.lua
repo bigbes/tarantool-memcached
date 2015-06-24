@@ -155,17 +155,19 @@ local buffer_methods = {
       return
    end,
 
-   recvfull = function(self, sckt)
-      return self:recv(sckt, self.size - self.woff)
+   recvfull = function(self, sckt, read_finished)
+      return self:recv(sckt, self.size - self.woff, read_finished)
    end,
 
-   recv = function(self, sckt, size)
-      if not sckt:readable() then return -1 end
+   recv = function(self, sckt, size, read_finished)
+      if (read_finished) then
+         if not sckt:readable() then return -1 end
+      end
       log.info('read size, woff:'.. tostring(size)..' '..tostring(self.woff))
       local retval = ffi.C.read(sckt:fd(), self.buffer + self.woff, size)
       log.info('read size:'.. tostring(retval))
       if retval == -1 then
-         self._errno = boxerrno()
+         sckt._errno = boxerrno()
          return -1
       end
       self.woff = self.woff + retval
@@ -179,7 +181,7 @@ local buffer_methods = {
          if not sckt:writable() then return -1 end
          local retval = ffi.C.send(sckt:fd(), self.buffer + pos, to_write, 0)
          if retval == -1 then
-            self._errno = boxerrno()
+            sckt._errno = boxerrno()
             return -1
          end
          to_write = to_write - retval
@@ -222,23 +224,25 @@ local memcached_methods = {
 
    init_loop = function(self, port)
       local function memcache_handler(srv, from)
+         log.info('begin_loop')
          local rbuf  = buffer.new()
          local wbuf  = buffer.new()
          local p_ptr = ffi.new('const char *[1]')
          local req   = ffi.new('struct mc_request')
-         local size  = 0
-         local rval  = 0
-         local resp  = 0
+         local size, rval, resp = 0, 0, 0
+         local read_finished = true
          while true do
             if (rval > 0) then
                rbuf:extend(rval)
-               rval = 0
             end
             rbuf:pack()
-            size = rbuf:recvfull(srv)
+            size = rbuf:recvfull(srv, read_finished) -- may yeild
             rbuf:log("Input")
             log.info(tostring(size))
-            if (size == nil) then break end
+            if (size == -1) then
+               log.error('Error %d: %s', srv:errno(), boxerrno.strerror(srv:errno()))
+               return
+            end
             local tp = ffi.cast('const char *', rbuf:rptr_get())
 
             p_ptr[0] = tp
@@ -251,7 +255,9 @@ local memcached_methods = {
                log.info('Parsing result: '..tostring(rval))
                log.info(tostring(req.op))
                --dump_request(req)
+               read_finished = true
                if (rval > 0) then
+                  read_finished = false
                   break
                elseif (rval == -1 and req.op == 0) then
                   wbuf:write_err()
@@ -270,16 +276,40 @@ local memcached_methods = {
                   break
                end
 
-               resp = self:cmd_exec(req, wbuf)
+               --resp = self:cmd_exec(req, wbuf)
+               local stat, resp = pcall(self.cmd_exec, self, req, wbuf)
+               if (stat == false) then
+                  if (box.error.last() ~= nil) then
+                     local errcode = box.error.last().code
+                     log.error('Error %d while executed: %s', errcode, resp)
+                     if (errcode == box.error.MEMORY_ISSUE) then
+                        resp = 'object too large for cache or OOM'
+                     else
+                        resp = string.format('%d: %s', errcode, resp)
+                     end
+                     wbuf:write_seer(resp)
+                     break
+                  else
+                     log.error('Error while executed: %s', resp)
+                     wbuf:write_seer(resp)
+                     break
+                  end
+               end
                log.info('response_stat: '..tostring(resp))
                if (resp == 'exit') then
                   break
                end
+               resp = nil
                rbuf.roff = p_ptr[0] - rbuf.buffer
             end
             wbuf:log("Output")
-            wbuf:sendall(srv)
-            if (rval < 0 or resp == 'clerr') then
+            if (read_finished) then
+               wbuf:sendall(srv) -- may yeild
+            end
+            if (stat == false) then
+               log.info('Server error, closing connection')
+               return
+            elseif (rval < 0 or resp == 'clerr') then
                log.info('Client error, exiting')
                return
             elseif (resp == 'exit') then
@@ -289,7 +319,6 @@ local memcached_methods = {
                log.info('Socker error, exiting')
                return
             end
-            fiber.sleep('0.1')
          end
       end
       self.srv = socket.tcp_server('0.0.0.0', port, {
@@ -355,17 +384,17 @@ local memcached_methods = {
                          tonumber(req.noreply), outbuf)
       elseif (req.op == ffi.C.MC_INCR) then
          return self:incr(ffi.string(req.key, req.key_len),
-                          tonumber(req.inc_val), tonumber(req.noreply),
+                          req.inc_val, tonumber(req.noreply),
                           outbuf)
       elseif (req.op == ffi.C.MC_DECR) then
          return self:decr(ffi.string(req.key, req.key_len),
-                          tonumber(req.inc_val), tonumber(req.noreply),
+                          req.inc_val, tonumber(req.noreply),
                           outbuf)
       elseif (req.op == ffi.C.MC_FLUSH) then
          return self:flush_all(tonumber(req.exptime), outbuf)
       elseif (req.op == ffi.C.MC_STATS) then
          -- Stat cmd currently is not implemented
-         return self:stats(ffi.string(req.key, req.key_len), outbuf)
+         return self:cmd_stats(ffi.string(req.key, req.key_len), outbuf)
       elseif (req.op == ffi.C.MC_VERSION) then
          return self:version(outbuf)
       elseif (req.op == ffi.C.MC_QUIT) then
@@ -478,7 +507,7 @@ local memcached_methods = {
       end
       box.commit()
       if noreply == true then return end
-      if tuple == nil then
+      if type(tuple) == 'string' then
          outbuf:write_ans('NOT_STORED')
       else
          outbuf:write_ans('STORED')
@@ -635,7 +664,7 @@ local memcached_methods = {
       end
       box.commit()
       if noreply == true then return end
-      if tuple == 'string' then
+      if type(tuple) == 'string' then
          outbuf:write_ans('NOT_FOUND')
       else
          outbuf:write_ans('DELETED')
@@ -654,25 +683,34 @@ local memcached_methods = {
       -- Execute requests
       local cas = self.casn; self.casn = self.casn + 1
       box.begin()
-      local t, tuple = self:get_tuple_or_expire(key)
-      if type(tuple) == 'string' then
+      local t = self:get_tuple_or_expire(key)
+      log.info('key, value %s %s', key, tostring(t))
+      if type(t) == 'string' then
          self:stat_incr('incr_misses')
       else
          self:stat_incr('incr_hits')
-         num = tonumber(t[2])
+         num = tonumber64(t[2])
          if num == nil then
             outbuf:write_cler('cannot increment or decrement non-numeric value')
             return 'clerr'
          end
-         num = tostring(num + value)
+         num = num + 0ULL
+         log.info('incr/decr val ' .. tostring(value))
+         if (num + value < num and num + value < value) then
+            num = '18446744073709551615ULL'
+         else
+            num = tostring(num + value)
+         end
+         num = num:sub(1, -4)
          t = self.mcs:update({key}, {{'=', 2, num}, {'=', 5, cas}})
       end
       box.commit()
       if noreply == true then return end
-      if type(tuple) == 'string' then
+      if type(t) == 'string' then
          outbuf:write_ans('NOT_FOUND')
+      else
+         outbuf:write_ans(string.format('%s', t[2]))
       end
-      outbuf:write_ans(string.format('%d', t[2]))
       return 0
    end,
 
@@ -687,25 +725,34 @@ local memcached_methods = {
       -- Execute requests
       local cas = self.casn; self.casn = self.casn + 1
       box.begin()
-      local t, tuple = self:get_tuple_or_expire(key)
-      if type(tuple) == 'string' then
+      local t = self:get_tuple_or_expire(key)
+      log.info('key, value %s %s', key, tostring(t))
+      if type(t) == 'string' then
          self:stat_incr('decr_misses')
       else
          self:stat_incr('decr_hits')
-         num = tonumber(t[2])
+         num = tonumber64(t[2])
          if num == nil then
             outbuf:write_cler('cannot increment or decrement non-numeric value')
             return 'clerr'
          end
-         num = tostring(num - value)
-         t = self.mcs:update({key}, {{'=', 2, value}, {'=', 5, cas}})
+         num = num + 0ULL
+         log.info('incr/decr val ' .. tostring(value))
+         if (num < value) then
+            num = '0ULL'
+         else
+            num = tostring(num - value)
+         end
+         num = num:sub(1, -4)
+         t = self.mcs:update({key}, {{'=', 2, num}, {'=', 5, cas}})
       end
       box.commit()
       if noreply == true then return end
-      if type(tuple) == 'string' then
+      if type(t) == 'string' then
          outbuf:write_ans('NOT_FOUND')
+      else
+         outbuf:write_ans(string.format('%s', t[2]))
       end
-      outbuf:write_ans(string.format('%d', t[2]))
       return 0
    end,
 
@@ -741,9 +788,11 @@ local memcached_methods = {
       return 0
    end,
 
-   stats = function(self, key, outbuf)
+   cmd_stats = function(self, key, outbuf)
+      log.info("%s %d ", key, #key)
       if (key == nil or #key == 0) then
-         for k, v in ipairs(self.stats) do
+         log.info('iterating')
+         for k, v in pairs(self.stats) do
             outbuf:write_ans(string.format('STAT %s %d', k, v))
          end
       else

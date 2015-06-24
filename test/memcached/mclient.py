@@ -89,9 +89,9 @@ class MemcachedConnection(TarantoolConnection):
         self.commands = commands
         self.socket.sendall(commands)
         if not silent:
-            #print "<<" + '-'*50
-            #sys.stdout.write(self.commands.strip() + '\n')
-            sys.stdout.write(self.commands)
+            print "<<" + '-'*50
+            sys.stdout.write(self.commands.strip() + '\n')
+            #sys.stdout.write(self.commands)
 
     def recv(self, silent = False):
         self.recv_buffer = ''
@@ -122,9 +122,9 @@ class MemcachedConnection(TarantoolConnection):
                 self.reply_unknown(cmd)
 
         if not silent:
-            #print ">>" + '-'*50
-            #sys.stdout.write(self.reply.strip() + '\n')
-            sys.stdout.write(self.reply)
+            print ">>" + '-'*50
+            sys.stdout.write(self.reply.strip() + '\n')
+            #sys.stdout.write(self.reply)
 
         return self.reply
 
