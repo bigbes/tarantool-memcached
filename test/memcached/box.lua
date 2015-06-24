@@ -4,11 +4,6 @@ os = require('os')
 mc = require('memcached')
 uri = require('uri')
 
-
-require('log').error(uri.parse(os.getenv('LISTEN')).service)
-require('log').error(os.getenv('ADMIN'))
-
-
 box.cfg{
     listen              = os.getenv("LISTEN"),
     slab_alloc_arena    = 0.1,

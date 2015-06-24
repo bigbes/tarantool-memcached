@@ -161,7 +161,9 @@ local buffer_methods = {
 
    recv = function(self, sckt, size)
       if not sckt:readable() then return -1 end
-      local retval = ffi.C.recv(sckt:fd(), self.buffer + self.woff, size, 0)
+      log.info('read size, woff:'.. tostring(size)..' '..tostring(self.woff))
+      local retval = ffi.C.read(sckt:fd(), self.buffer + self.woff, size)
+      log.info('read size:'.. tostring(retval))
       if retval == -1 then
          self._errno = boxerrno()
          return -1
@@ -228,6 +230,10 @@ local memcached_methods = {
          local rval  = 0
          local resp  = 0
          while true do
+            if (rval > 0) then
+               rbuf:extend(rval)
+               rval = 0
+            end
             rbuf:pack()
             size = rbuf:recvfull(srv)
             rbuf:log("Input")
@@ -283,6 +289,7 @@ local memcached_methods = {
                log.info('Socker error, exiting')
                return
             end
+            fiber.sleep('0.1')
          end
       end
       self.srv = socket.tcp_server('0.0.0.0', port, {
@@ -355,7 +362,7 @@ local memcached_methods = {
                           tonumber(req.inc_val), tonumber(req.noreply),
                           outbuf)
       elseif (req.op == ffi.C.MC_FLUSH) then
-         return self:flush(outbuf)
+         return self:flush_all(tonumber(req.exptime), outbuf)
       elseif (req.op == ffi.C.MC_STATS) then
          -- Stat cmd currently is not implemented
          return self:stats(ffi.string(req.key, req.key_len), outbuf)
@@ -377,23 +384,33 @@ local memcached_methods = {
    get_tuple_or_expire = function(self, key)
       local tuple = self.mcs:get{key}
       if tuple == nil then return 'none' end
-      local time, etime, ptime = math.floor(fiber.time()), tuple[3], tuple[6]
+      local time, etime, ptime = fiber.time(), tuple[3], tuple[6]
       -- check for invalidation
       if ((ptime <= self.flush and self.flush <= time) or
           (etime <= time and etime ~= 0)) then
          -- invalidate and free
          self.mcs:delete{key}
+         log.info('expired by get')
          self:stat_incr('expired_runtime')
          return 'expired'
       end
       return tuple
    end,
 
+   normalize_flush_time = function(self, exptime)
+      exptime = exptime or 0
+      if type(exptime) ~= 'number' then exptime = 0 end
+      if (exptime < (30*24*60*60) and exptime >= 0) then
+         exptime = (fiber.time()) + exptime
+      end
+      return exptime
+   end,
+
    normalize_exptime = function(self, exptime)
       exptime = exptime or 0
       if type(exptime) ~= 'number' then exptime = 0 end
       if (exptime < (30*24*60*60) and exptime > 0) then
-         exptime = math.floor(fiber.time()) + exptime
+         exptime = (fiber.time()) + exptime
       end
       return exptime
    end,
@@ -407,7 +424,7 @@ local memcached_methods = {
       exptime = self:normalize_exptime(exptime)
       -- Execute requests
       local cas = self.casn; self.casn = self.casn + 1
-      local ptime = math.floor(fiber.time())
+      local ptime = (fiber.time())
       self:stat_incr('cmd_set')
       self.mcs:replace{key, value, exptime, flags, cas, ptime}
       if noreply == true then return 0 end
@@ -425,7 +442,7 @@ local memcached_methods = {
       exptime = self:normalize_exptime(exptime)
       -- Execute requests
       local cas = self.casn; self.casn = self.casn + 1
-      local ptime = math.floor(fiber.time())
+      local ptime = (fiber.time())
       self:stat_incr('cmd_set')
       box.begin()
       local tuple = self:get_tuple_or_expire(key)
@@ -434,7 +451,7 @@ local memcached_methods = {
       end
       box.commit()
       if noreply == true then return end
-      if tuple ~= nil then
+      if type(tuple) ~= 'string' then
          outbuf:write_ans('NOT_STORED')
       else
          outbuf:write_ans('STORED')
@@ -452,7 +469,7 @@ local memcached_methods = {
       exptime = self:normalize_exptime(exptime)
       -- Execute requests
       local cas = self.casn; self.casn = self.casn + 1
-      local ptime = math.floor(fiber.time())
+      local ptime = (fiber.time())
       self:stat_incr('cmd_set')
       box.begin()
       local tuple = self:get_tuple_or_expire(key)
@@ -521,7 +538,7 @@ local memcached_methods = {
       exptime = self:normalize_exptime(exptime)
       -- Execute requests
       local ncas = self.casn; self.casn = self.casn + 1
-      local ptime = math.floor(fiber.time())
+      local ptime = (fiber.time())
       box.begin()
       local tuple = self:get_tuple_or_expire(key)
       if type(tuple) ~= 'string' then
@@ -529,7 +546,7 @@ local memcached_methods = {
             self:stat_incr('cas_badval')
          else
             self:stat_incr('cas_hits')
-            self.mcs:replace{key, value, exptime, flags, cas, ptime}
+            self.mcs:replace{key, value, exptime, flags, ncas, ptime}
          end
       else
          self:stat_incr('cas_misses')
@@ -555,8 +572,12 @@ local memcached_methods = {
       for _, key in ipairs(keys) do
          local t = self:get_tuple_or_expire(key)
          if (type(t) ~= 'string') then
-            local resp = string.format('VALUE %s %d %d', t[1], tostring(t[4]), #t[2])
-            outbuf:write_ans(resp)
+            outbuf:write('VALUE ')
+            outbuf:write(t[1])
+            outbuf:write(' ')
+            outbuf:write(tostring(t[4]))
+            outbuf:write(' ')
+            outbuf:write_ans(tostring(#t[2]))
             outbuf:write_ans(t[2])
             self:stat_incr('get_hits')
          else
@@ -577,9 +598,14 @@ local memcached_methods = {
       for _, key in ipairs(keys) do
          local t = self:get_tuple_or_expire(key)
          if (type(t) ~= 'string') then
-            local resp = string.format('VALUE %s %d %d %d',
-                                       t[1], t[4], #t[2], t[5])
-            outbuf:write_ans(resp)
+            outbuf:write('VALUE ')
+            outbuf:write(t[1])
+            outbuf:write(' ')
+            outbuf:write(tostring(t[4]))
+            outbuf:write(' ')
+            outbuf:write(tostring(#t[2]))
+            outbuf:write(' ')
+            outbuf:write_ans(tostring(t[5]))
             outbuf:write_ans(t[2])
             self:stat_incr('get_hits')
          else
@@ -609,7 +635,7 @@ local memcached_methods = {
       end
       box.commit()
       if noreply == true then return end
-      if err == nil then
+      if tuple == 'string' then
          outbuf:write_ans('NOT_FOUND')
       else
          outbuf:write_ans('DELETED')
@@ -709,7 +735,8 @@ local memcached_methods = {
 
    flush_all = function(self, time, outbuf)
       self:stat_incr('cmd_flush')
-      self.flush = math.max(self.flush, self:normalize_exptime(time))
+      time = self:normalize_flush_time(time)
+      self.flush = math.max(self.flush, self:normalize_flush_time(time))
       outbuf:write_ans('OK')
       return 0
    end,
@@ -744,10 +771,11 @@ local memcached_methods = {
 }
 
 local function mc_is_expired(args, tuple)
-   local time, etime, ptime = math.floor(fiber.time()), tuple[3], tuple[6]
+   local time, etime, ptime = (fiber.time()), tuple[3], tuple[6]
    -- check for invalidation
    if ((ptime <= args.flush and args.flush <= time) or
          (etime <= time and etime ~= 0)) then
+      log.info('expired by expirationd')
       return true
    end
    return false
@@ -760,7 +788,13 @@ local function mc_pr_expired(space_id, args, tuple)
    ):totable()
 
    args:stat_incr('expired_daemon')
-   box.space[space_id]:delete(key)
+   log.info('lsn before '..tostring(box.info.vclock[1]))
+   log.info('expired by expirationd')
+   local t = box.space[space_id]:delete(key)
+   log.info(tostring(t))
+   local t = box.space[space_id]:get(key)
+   log.info(tostring(t))
+   log.info('lsn after '..tostring(box.info.vclock[1]))
 end
 
 local memcached = {
