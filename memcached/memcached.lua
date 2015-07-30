@@ -1,28 +1,65 @@
 local ffi = require('ffi')
 
-local yaml = require('yaml')
-local socket = require('socket')
-local fiber = require('fiber')
 local log = require('log')
-local boxerrno = require('errno')
 local fun = require('fun')
+local yaml = require('yaml')
+local fiber = require('fiber')
+local socket = require('socket')
+local boxerrno = require('errno')
 
-local expd = require('expirationd')
+local expd = require('memcached.expirationd')
 
-ffi.cdef(io.open('memcached.h', 'r'):read("*all"))
+require('memcached.libparser')
+ffi_parser = ffi.load('libparser.so')
 
 ffi.cdef[[
-   void *memmove(void *dst, const void *src, size_t num);
+    enum mc_op {
+        MC_SET = 1,
+        MC_ADD,
+        MC_REPLACE,
+        MC_APPEND,
+        MC_PREPEND,
+        MC_CAS,
+        MC_GET,
+        MC_GETS,
+        MC_DELETE,
+        MC_INCR,
+        MC_DECR,
+        MC_FLUSH,
+        MC_STATS,
+        MC_VERSION,
+        MC_QUIT,
+    };
+
+    struct mc_request {
+        enum mc_op op;
+        const char *key;
+        size_t      key_len;
+        uint32_t    key_count;
+        const char *data;
+        size_t      data_len;
+        uint64_t    flags;
+        uint64_t    bytes;
+        uint64_t    cas;
+        uint64_t    exptime;
+        uint64_t    inc_val;
+        bool        noreply;
+    };
+
+    int mc_parse(struct mc_request *req, const char **p, const char *pe);
+
+    void *memmove(void *dst, const void *src, size_t num);
 ]]
-func = ffi.load('memctnt')
+
+-- func = ffi.load('./libmemctnt.so')
 
 local function dump_request(req)
-   log.info('operation: %d', req.op)
-   log.info('keys: %d, len(%d) - %s',
+   log.debug('operation: %d', req.op)
+   log.debug('keys: %d, len(%d) - %s',
       tonumber(req.key_count),
       tonumber(req.key_len),
       ffi.string(req.key, req.key_len))
-   log.info('data: len(%d) - %s',
+   log.debug('data: len(%d) - %s',
       tonumber(req.data_len),
       ffi.string(req.data, req.data_len))
 end
@@ -163,9 +200,9 @@ local buffer_methods = {
       if (read_finished) then
          if not sckt:readable() then return -1 end
       end
-      log.info('read size, woff:'.. tostring(size)..' '..tostring(self.woff))
+      log.debug('read size, woff:'.. tostring(size)..' '..tostring(self.woff))
       local retval = ffi.C.read(sckt:fd(), self.buffer + self.woff, size)
-      log.info('read size:'.. tostring(retval))
+      log.debug('read size:'.. tostring(retval))
       if retval == -1 then
          sckt._errno = boxerrno()
          return -1
@@ -193,7 +230,7 @@ local buffer_methods = {
       return pos
    end,
    log = function(self, str)
-      log.info('%s buffer: \'%s\'',
+      log.debug('%s buffer: \'%s\'',
          str, ffi.string(self:rptr_get(), self.woff - self.roff))
    end
 }
@@ -224,7 +261,7 @@ local memcached_methods = {
 
    init_loop = function(self, port)
       local function memcache_handler(srv, from)
-         log.info('begin_loop')
+         log.debug('begin_loop')
          local rbuf  = buffer.new()
          local wbuf  = buffer.new()
          local p_ptr = ffi.new('const char *[1]')
@@ -238,7 +275,7 @@ local memcached_methods = {
             rbuf:pack()
             size = rbuf:recvfull(srv, read_finished) -- may yeild
             rbuf:log("Input")
-            log.info(tostring(size))
+            log.debug(tostring(size))
             if (size == -1) then
                log.error('Error %d: %s', srv:errno(), boxerrno.strerror(srv:errno()))
                return
@@ -251,9 +288,9 @@ local memcached_methods = {
                   resp = nil
                   break
                end
-               rval = func.mc_parse(req, p_ptr, rbuf:wptr_get())
-               log.info('Parsing result: '..tostring(rval))
-               log.info(tostring(req.op))
+               rval = ffi_parser.mc_parse(req, p_ptr, rbuf:wptr_get())
+               log.debug('Parsing result: '..tostring(rval))
+               log.debug(tostring(req.op))
                --dump_request(req)
                read_finished = true
                if (rval > 0) then
@@ -295,7 +332,7 @@ local memcached_methods = {
                      break
                   end
                end
-               log.info('response_stat: '..tostring(resp))
+               log.debug('response_stat: '..tostring(resp))
                if (resp == 'exit') then
                   break
                end
@@ -307,16 +344,16 @@ local memcached_methods = {
                wbuf:sendall(srv) -- may yeild
             end
             if (stat == false) then
-               log.info('Server error, closing connection')
+               log.debug('Server error, closing connection')
                return
             elseif (rval < 0 or resp == 'clerr') then
-               log.info('Client error, exiting')
+               log.debug('Client error, exiting')
                return
             elseif (resp == 'exit') then
-               log.info('Client requested exit')
+               log.debug('Client requested exit')
                return
             elseif (size == nil) then
-               log.info('Socker error, exiting')
+               log.debug('Socker error, exiting')
                return
             end
          end
@@ -401,7 +438,7 @@ local memcached_methods = {
          return 'exit'
       else
          outbuf:write_err()
-         log.info('Processing undefined command')
+         log.debug('Processing undefined command')
          return 'exit'
       end
    end,
@@ -419,7 +456,7 @@ local memcached_methods = {
           (etime <= time and etime ~= 0)) then
          -- invalidate and free
          self.mcs:delete{key}
-         log.info('expired by get')
+         log.debug('expired by get')
          self:stat_incr('expired_runtime')
          return 'expired'
       end
@@ -684,7 +721,7 @@ local memcached_methods = {
       local cas = self.casn; self.casn = self.casn + 1
       box.begin()
       local t = self:get_tuple_or_expire(key)
-      log.info('key, value %s %s', key, tostring(t))
+      log.debug('key, value %s %s', key, tostring(t))
       if type(t) == 'string' then
          self:stat_incr('incr_misses')
       else
@@ -695,7 +732,7 @@ local memcached_methods = {
             return 'clerr'
          end
          num = num + 0ULL
-         log.info('incr/decr val ' .. tostring(value))
+         log.debug('incr/decr val ' .. tostring(value))
          if (num + value < num and num + value < value) then
             num = '18446744073709551615ULL'
          else
@@ -726,7 +763,7 @@ local memcached_methods = {
       local cas = self.casn; self.casn = self.casn + 1
       box.begin()
       local t = self:get_tuple_or_expire(key)
-      log.info('key, value %s %s', key, tostring(t))
+      log.debug('key, value %s %s', key, tostring(t))
       if type(t) == 'string' then
          self:stat_incr('decr_misses')
       else
@@ -737,7 +774,7 @@ local memcached_methods = {
             return 'clerr'
          end
          num = num + 0ULL
-         log.info('incr/decr val ' .. tostring(value))
+         log.debug('incr/decr val ' .. tostring(value))
          if (num < value) then
             num = '0ULL'
          else
@@ -789,9 +826,9 @@ local memcached_methods = {
    end,
 
    cmd_stats = function(self, key, outbuf)
-      log.info("%s %d ", key, #key)
+      log.debug("%s %d ", key, #key)
       if (key == nil or #key == 0) then
-         log.info('iterating')
+         log.debug('iterating')
          for k, v in pairs(self.stats) do
             outbuf:write_ans(string.format('STAT %s %d', k, v))
          end
@@ -824,7 +861,7 @@ local function mc_is_expired(args, tuple)
    -- check for invalidation
    if ((ptime <= args.flush and args.flush <= time) or
          (etime <= time and etime ~= 0)) then
-      log.info('expired by expirationd')
+      log.debug('expired by expirationd')
       return true
    end
    return false
@@ -837,13 +874,13 @@ local function mc_pr_expired(space_id, args, tuple)
    ):totable()
 
    args:stat_incr('expired_daemon')
-   log.info('lsn before '..tostring(box.info.vclock[1]))
-   log.info('expired by expirationd')
+   log.debug('lsn before '..tostring(box.info.vclock[1]))
+   log.debug('expired by expirationd')
    local t = box.space[space_id]:delete(key)
-   log.info(tostring(t))
+   log.debug(tostring(t))
    local t = box.space[space_id]:get(key)
-   log.info(tostring(t))
-   log.info('lsn after '..tostring(box.info.vclock[1]))
+   log.debug(tostring(t))
+   log.debug('lsn after '..tostring(box.info.vclock[1]))
 end
 
 local memcached = {
@@ -888,5 +925,4 @@ local memcached = {
    end
 }
 
-log.info(type(memcached))
 return memcached

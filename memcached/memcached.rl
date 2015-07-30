@@ -5,14 +5,17 @@
 #include <assert.h>
 #include <stdio.h>
 
-#include "memcached.h"
+#include <lua.h>
+#include <lualib.h>
+#include <lauxlib.h>
 
-#include <luajit-2.0/lua.h>
+#include "memcached.h"
 
 %%{
     machine memcached;
     write data;
 }%%
+
 #if defined(__APPLE__)
 #  define MC_EXPORT __attribute__((visibility("default")))
 #elif defined(_WIN32) || defined(__WIN32__)
@@ -154,6 +157,8 @@ mc_parse(struct mc_request *req, const char **p_ptr, const char *pe) {
     return 0;
 }
 
-int luaopen_memctnt(lua_State *L) {
+LUA_API int
+luaopen_memcached_libparser(lua_State *L)
+{
     return 0;
 }

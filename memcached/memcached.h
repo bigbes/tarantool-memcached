@@ -31,6 +31,4 @@ struct mc_request {
 	bool        noreply;
 };
 
-int mc_parse(struct mc_request *req,
-	     const char **p,
-	     const char *pe);
+int mc_parse(struct mc_request *req, const char **p, const char *pe);

@@ -1,8 +1,8 @@
 #!/usr/bin/env tarantool
 
 os = require('os')
-mc = require('memcached')
 uri = require('uri')
+mc = require('memcached.memcached')
 
 box.cfg{
     listen              = os.getenv("LISTEN"),
