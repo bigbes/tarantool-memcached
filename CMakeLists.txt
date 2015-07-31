@@ -17,7 +17,7 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS}")
 set(CMAKE_C_FLAGS_DEBUG "${CMAKE_C_FLAGS_DEBUG} -Wall -Wextra")
 
 add_subdirectory(memcached)
-
+add_subdirectory(test)
 # add_custom_target(test
 #     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
 #     COMMAND ${PROJECT_SOURCE_DIR}/test/http.test.lua)
